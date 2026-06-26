@@ -3,8 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Supabase (criado no Storage da Vercel) injeta estas variáveis automaticamente.
+  // url = conexão com pool (queries da aplicação)
+  // directUrl = conexão direta (db push / migrations)
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
 model User {
