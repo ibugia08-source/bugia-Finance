@@ -26,7 +26,7 @@ import { ResponsibleSelect } from "./responsible-select";
 import { CardDetailFilters } from "./month-filter";
 import { AccountCardsSection } from "./account-cards-section";
 import { ArrowLeft } from "lucide-react";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 
 type Search = {
   mes?: string;
@@ -70,7 +70,7 @@ export default async function CardDetailPage({
   params: { id: string };
   searchParams: Search;
 }) {
-  await requireAdmin();
+  await getViewer();
   const card = await prisma.creditCard.findUnique({
     where: { id: params.id },
     include: {

@@ -13,6 +13,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:diagnose": "tsx scripts/diagnose-data.ts",
     "db:fix-imported": "tsx scripts/fix-imported-data.ts",
+    "db:multiuser": "tsx scripts/multiuser-migrate-data.ts",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",

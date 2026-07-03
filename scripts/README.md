@@ -53,10 +53,34 @@ consolidar uma fatura antiga fragmentada, exclua as transações do lote
 antigo e reimporte o PDF — a importação nova é ancorada no mês correto
 e idempotente (reimportar o mesmo arquivo não duplica).
 
-## Ordem recomendada
+## Migração para multiusuário (isolamento por dono)
 
-1. `npm run db:baseline` + `npm run db:migrate:deploy`
-2. `npm run db:diagnose`
-3. `npm run db:fix-imported` (conferir o relatório)
-4. `npm run db:fix-imported -- --apply`
-5. Deploy normal na Vercel.
+A partir desta versão, cada usuário só vê os próprios dados. Toda entidade
+privada ganhou uma coluna `ownerId` e a extensão do Prisma
+(`src/lib/prisma.ts`) injeta o dono automaticamente em toda leitura/criação.
+
+Passo único no banco de produção (depois de aplicar a migration nova):
+
+```bash
+npm run db:migrate:deploy    # cria as colunas ownerId
+npm run db:multiuser              # DRY-RUN: mostra o que faria
+npm run db:multiuser -- --apply   # executa (com backup em ./backups/)
+```
+
+Com `--apply`, o script:
+1. grava backup JSON completo;
+2. apaga os lançamentos de teste (transações, parcelas, faturas, receitas,
+   a receber, pagamentos, movimentos de caixa, importações) e logs de
+   IA/WhatsApp;
+3. atribui `ownerId = admin primário` a tudo que foi preservado (contas,
+   cartões, pessoas, metas, regras) e zera o saldo dos caixas.
+
+Depois disso, os demais usuários (ex.: Alvaro) começam com a conta vazia e o
+admin mantém o setup preservado — sem vazamento entre contas.
+
+## Ordem recomendada (deploy desta versão)
+
+1. `npm run db:baseline` (só na 1ª vez, se ainda não feito)
+2. `npm run db:migrate:deploy`
+3. `npm run db:multiuser` (conferir) → `npm run db:multiuser -- --apply`
+4. Deploy normal na Vercel.

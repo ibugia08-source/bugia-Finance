@@ -5,8 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Filters } from "./filters";
-import { getViewer, isUnlinkedUser } from "@/lib/auth/viewer";
-import { UnlinkedBanner } from "@/components/unlinked-banner";
+import { getViewer } from "@/lib/auth/viewer";
 
 type Search = {
   mes?: string;
@@ -33,16 +32,10 @@ function statusVariant(status: string): any {
 }
 
 export default async function TransacoesPage({ searchParams }: { searchParams: Search }) {
-  const viewer = await getViewer("/transacoes");
-  if (viewer.role === "USER") {
-    if (isUnlinkedUser(viewer)) return <UnlinkedBanner />;
-  }
+  await getViewer("/transacoes");
 
+  // Isolamento por dono é automático (extensão do Prisma).
   const where: any = {};
-  if (viewer.role === "USER") {
-    // USER comum: só transações onde ele é responsável
-    where.responsibleId = viewer.personId!;
-  }
 
   if (searchParams.mes) {
     const [y, m] = searchParams.mes.split("-").map(Number);
@@ -52,7 +45,7 @@ export default async function TransacoesPage({ searchParams }: { searchParams: S
       where.date = { gte: start, lt: end };
     }
   }
-  if (searchParams.pessoa && viewer.role === "ADMIN") where.responsibleId = searchParams.pessoa;
+  if (searchParams.pessoa) where.responsibleId = searchParams.pessoa;
   if (searchParams.cartao) where.cardId = searchParams.cartao;
   if (searchParams.categoria) where.categoryId = searchParams.categoria;
   if (searchParams.status) where.status = searchParams.status;

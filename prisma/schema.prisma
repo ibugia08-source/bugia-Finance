@@ -22,15 +22,35 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   person        Person?
+
+  // ===== Multiusuário: dados privados de cada conta (owner) =====
+  ownedAccounts       Account[]            @relation("OwnerAccount")
+  ownedCards          CreditCard[]         @relation("OwnerCreditCard")
+  ownedAccountCards   AccountCard[]        @relation("OwnerAccountCard")
+  ownedTransactions   Transaction[]        @relation("OwnerTransaction")
+  ownedInvoices       CreditCardInvoice[]  @relation("OwnerInvoice")
+  ownedImportBatches  ImportBatch[]        @relation("OwnerImportBatch")
+  ownedIncomes        Income[]             @relation("OwnerIncome")
+  ownedCashBoxes      CashBox[]            @relation("OwnerCashBox")
+  ownedPeople         Person[]             @relation("OwnerPerson")
+  ownedReceivables    Receivable[]         @relation("OwnerReceivable")
+  ownedPayments       PersonPayment[]      @relation("OwnerPersonPayment")
+  ownedGoals          Goal[]               @relation("OwnerGoal")
+  ownedRules          CategorizationRule[] @relation("OwnerRule")
+  ownedInstallments   Installment[]        @relation("OwnerInstallment")
+  ownedCashMovements  CashBoxMovement[]    @relation("OwnerCashMovement")
 }
 
 model Person {
   id            String        @id @default(cuid())
-  name          String        @unique
+  name          String
   type          String        @default("pessoal") // pessoal | empresa | terceiro | familiar
   notes         String?
   userId        String?       @unique
   user          User?         @relation(fields: [userId], references: [id])
+  // Dono do registro (conta multiusuário). O nome é único POR dono, não global.
+  ownerId       String?
+  owner         User?         @relation("OwnerPerson", fields: [ownerId], references: [id])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -40,6 +60,9 @@ model Person {
   receivables   Receivable[]
   incomes       Income[]
   payments      PersonPayment[]
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
 }
 
 model Account {
@@ -49,6 +72,8 @@ model Account {
   type          String        @default("corrente") // corrente | poupanca | dinheiro | investimento
   balance       Float         @default(0)
   active        Boolean       @default(true)
+  ownerId       String?
+  owner         User?         @relation("OwnerAccount", fields: [ownerId], references: [id])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -57,6 +82,8 @@ model Account {
   cashBoxes     CashBox[]
   cards         CreditCard[]
   personPayments PersonPayment[]
+
+  @@index([ownerId])
 }
 
 model CreditCard {
@@ -72,12 +99,16 @@ model CreditCard {
   closingDay      Int                  @default(1)
   dueDay          Int                  @default(10)
   active          Boolean              @default(true)
+  ownerId         String?
+  owner           User?                @relation("OwnerCreditCard", fields: [ownerId], references: [id])
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
   transactions    Transaction[]
   invoices        CreditCardInvoice[]
   accountCards    AccountCard[]
+
+  @@index([ownerId])
 }
 
 // Cartão (físico ou virtual) que pertence a uma conta bancária (CreditCard).
@@ -91,10 +122,14 @@ model AccountCard {
   lastDigits    String?     // últimos 4 dígitos
   limit         Float       @default(0)        // limite individual
   notes         String?
+  ownerId       String?
+  owner         User?       @relation("OwnerAccountCard", fields: [ownerId], references: [id])
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   transactions  Transaction[]
+
+  @@index([ownerId])
 }
 
 model Category {
@@ -163,6 +198,10 @@ model Transaction {
   // Preparação Open Finance: id do registro no sistema de origem.
   externalId      String?
 
+  // Dono do registro (conta multiusuário).
+  ownerId         String?
+  owner           User?         @relation("OwnerTransaction", fields: [ownerId], references: [id])
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -174,6 +213,7 @@ model Transaction {
   @@index([status])
   @@index([installmentGroupKey])
   @@index([accountCardId])
+  @@index([ownerId])
 }
 
 model Installment {
@@ -187,11 +227,14 @@ model Installment {
   paid            Boolean     @default(false)
   invoiceId       String?
   invoice         CreditCardInvoice? @relation(fields: [invoiceId], references: [id])
+  ownerId         String?
+  owner           User?       @relation("OwnerInstallment", fields: [ownerId], references: [id])
   createdAt       DateTime    @default(now())
 
   @@index([transactionId])
   @@index([paid, dueDate])
   @@index([invoiceId])
+  @@index([ownerId])
 }
 
 model CreditCardInvoice {
@@ -209,6 +252,8 @@ model CreditCardInvoice {
   status          String        @default("aberta") // aberta | fechada | paga | atrasada | parcial
   // Preparação Open Finance: id da fatura no sistema de origem.
   externalId      String?
+  ownerId         String?
+  owner           User?         @relation("OwnerInvoice", fields: [ownerId], references: [id])
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -218,6 +263,7 @@ model CreditCardInvoice {
   @@unique([cardId, referenceYear, referenceMonth])
   @@index([status])
   @@index([dueDate])
+  @@index([ownerId])
 }
 
 model Receivable {
@@ -231,8 +277,12 @@ model Receivable {
   paidAt          DateTime?
   status          String        @default("aberto") // aberto | pago | atrasado | renegociado
   notes           String?
+  ownerId         String?
+  owner           User?         @relation("OwnerReceivable", fields: [ownerId], references: [id])
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+
+  @@index([ownerId])
 }
 
 model Income {
@@ -256,11 +306,14 @@ model Income {
   // Compatibilidade com seed/legado
   date            DateTime?
   source          String?
+  ownerId         String?
+  owner           User?       @relation("OwnerIncome", fields: [ownerId], references: [id])
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   @@index([receivedAt])
   @@index([status])
+  @@index([ownerId])
 }
 
 model CashBox {
@@ -273,10 +326,14 @@ model CashBox {
   accountId       String?
   account         Account?            @relation(fields: [accountId], references: [id])
   notes           String?
+  ownerId         String?
+  owner           User?               @relation("OwnerCashBox", fields: [ownerId], references: [id])
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
   movements       CashBoxMovement[]
+
+  @@index([ownerId])
 }
 
 model PersonPayment {
@@ -290,11 +347,14 @@ model PersonPayment {
   accountId       String?
   account         Account?    @relation(fields: [accountId], references: [id])
   notes           String?
+  ownerId         String?
+  owner           User?       @relation("OwnerPersonPayment", fields: [ownerId], references: [id])
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   @@index([personId])
   @@index([paidAt])
+  @@index([ownerId])
 }
 
 model CashBoxMovement {
@@ -306,10 +366,13 @@ model CashBoxMovement {
   amount          Float
   date            DateTime    @default(now())
   description     String?
+  ownerId         String?
+  owner           User?       @relation("OwnerCashMovement", fields: [ownerId], references: [id])
   createdAt       DateTime    @default(now())
 
   @@index([cashBoxId])
   @@index([date])
+  @@index([ownerId])
 }
 
 model Goal {
@@ -321,8 +384,12 @@ model Goal {
   deadline        DateTime?
   priority        Int         @default(3) // 1=alta, 5=baixa
   notes           String?
+  ownerId         String?
+  owner           User?       @relation("OwnerGoal", fields: [ownerId], references: [id])
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+
+  @@index([ownerId])
 }
 
 model ImportBatch {
@@ -338,9 +405,13 @@ model ImportBatch {
   total           Int           @default(0)
   imported        Int           @default(0)
   duplicates      Int           @default(0)
+  ownerId         String?
+  owner           User?         @relation("OwnerImportBatch", fields: [ownerId], references: [id])
   createdAt       DateTime      @default(now())
 
   transactions    Transaction[]
+
+  @@index([ownerId])
 }
 
 model CategorizationRule {
@@ -363,8 +434,13 @@ model CategorizationRule {
   reimbursable        Boolean?
   status              String?
 
+  ownerId         String?
+  owner           User?       @relation("OwnerRule", fields: [ownerId], references: [id])
+
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+
+  @@index([ownerId])
 }
 
 // ===== Assistente de IA (co-piloto financeiro) =====

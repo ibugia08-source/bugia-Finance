@@ -110,10 +110,10 @@ const RULES = [
 
 async function main() {
   console.log("→ Seed: usuário admin");
-  const existing = await prisma.user.findUnique({ where: { email: ADMIN.email } });
-  if (!existing) {
+  let admin = await prisma.user.findUnique({ where: { email: ADMIN.email } });
+  if (!admin) {
     const passwordHash = await bcrypt.hash(ADMIN.password, 10);
-    await prisma.user.create({
+    admin = await prisma.user.create({
       data: {
         name: ADMIN.name,
         email: ADMIN.email,
@@ -126,17 +126,20 @@ async function main() {
   } else {
     console.log(`  • admin já existe: ${ADMIN.email}`);
   }
+  const ownerId = admin.id;
 
-  // IMPORTANTE: o seed é CREATE-ONLY — nunca sobrescreve dados existentes
-  // (limites, dias de fechamento, tipos etc. editados pelo usuário).
-  // Roda apenas manualmente via `npm run db:seed`.
+  // IMPORTANTE: o seed é CREATE-ONLY — nunca sobrescreve dados existentes.
+  // Multiusuário: entidades privadas (pessoas, cartões, regras) nascem
+  // pertencendo ao admin (ownerId). Categorias são globais (compartilhadas).
+  // Este script usa o PrismaClient CRU (sem a extensão), então o ownerId é
+  // atribuído explicitamente.
   console.log("→ Seed: pessoas");
   for (const p of PEOPLE) {
-    const exists = await prisma.person.findUnique({ where: { name: p.name } });
-    if (!exists) await prisma.person.create({ data: p });
+    const exists = await prisma.person.findFirst({ where: { name: p.name, ownerId } });
+    if (!exists) await prisma.person.create({ data: { ...p, ownerId } });
   }
 
-  console.log("→ Seed: categorias");
+  console.log("→ Seed: categorias (globais)");
   for (const c of CATEGORIES) {
     const exists = await prisma.category.findUnique({ where: { name: c.name } });
     if (!exists) await prisma.category.create({ data: c });
@@ -144,9 +147,9 @@ async function main() {
 
   console.log("→ Seed: cartões");
   for (const c of CARDS) {
-    const exists = await prisma.creditCard.findFirst({ where: { name: c.name } });
+    const exists = await prisma.creditCard.findFirst({ where: { name: c.name, ownerId } });
     if (exists) continue;
-    const holder = await prisma.person.findUnique({ where: { name: c.holder } });
+    const holder = await prisma.person.findFirst({ where: { name: c.holder, ownerId } });
     await prisma.creditCard.create({
       data: {
         name: c.name,
@@ -156,21 +159,24 @@ async function main() {
         limitTotal: c.limitTotal,
         closingDay: c.closingDay,
         dueDay: c.dueDay,
+        ownerId,
       },
     });
   }
 
   console.log("→ Seed: conta padrão");
-  const existsAccount = await prisma.account.findFirst({ where: { name: "Conta Principal" } });
+  const existsAccount = await prisma.account.findFirst({
+    where: { name: "Conta Principal", ownerId },
+  });
   if (!existsAccount) {
     await prisma.account.create({
-      data: { name: "Conta Principal", bank: "Inter", type: "corrente", balance: 0 },
+      data: { name: "Conta Principal", bank: "Inter", type: "corrente", balance: 0, ownerId },
     });
   }
 
   console.log("→ Seed: regras");
   for (const r of RULES) {
-    const exists = await prisma.categorizationRule.findFirst({ where: { name: r.name } });
+    const exists = await prisma.categorizationRule.findFirst({ where: { name: r.name, ownerId } });
     if (exists) continue;
     const cat = await prisma.category.findUnique({ where: { name: r.categoryName } });
     await prisma.categorizationRule.create({
@@ -180,6 +186,7 @@ async function main() {
         descriptionContains: r.descriptionContains,
         categoryId: cat?.id,
         belongsTo: r.belongsTo,
+        ownerId,
       },
     });
   }

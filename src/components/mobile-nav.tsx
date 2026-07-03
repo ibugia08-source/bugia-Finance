@@ -7,31 +7,20 @@ import {
   ArrowDownToLine,
   PiggyBank,
   Receipt,
-  Settings2,
-  Users,
+  Landmark,
 } from "lucide-react";
 
-const adminItems = [
+// Multiusuário: todos têm o app financeiro completo dos próprios dados.
+const items = [
   { href: "/dashboard", label: "Início", icon: LayoutDashboard },
   { href: "/receitas", label: "Receitas", icon: ArrowDownToLine },
   { href: "/caixa", label: "Caixa", icon: PiggyBank },
   { href: "/transacoes", label: "Mov.", icon: Receipt },
-  { href: "/configuracoes", label: "Mais", icon: Settings2 },
+  { href: "/cartoes", label: "Cartões", icon: Landmark },
 ];
 
-const userItems = [
-  { href: "/dashboard", label: "Início", icon: LayoutDashboard },
-  { href: "/transacoes", label: "Mov.", icon: Receipt },
-  { href: "/pessoas", label: "Eu", icon: Users },
-];
-
-export function MobileNav({
-  user,
-}: {
-  user?: { role: "ADMIN" | "USER" } | null;
-}) {
+export function MobileNav() {
   const path = usePathname();
-  const items = user?.role === "USER" ? userItems : adminItems;
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 flex justify-around p-1.5 z-40">
       {items.map((it) => {

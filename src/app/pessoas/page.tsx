@@ -1,25 +1,17 @@
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL } from "@/lib/format";
 import { PersonDialog } from "./person-dialog";
 import { PeopleList, type PersonRow } from "./people-list";
-import { getViewer, isUnlinkedUser } from "@/lib/auth/viewer";
-import { UnlinkedBanner } from "@/components/unlinked-banner";
+import { getViewer } from "@/lib/auth/viewer";
 
 const OPEN_RECEIVABLE = ["aberto", "atrasado", "renegociado"];
 
 export default async function PessoasPage() {
-  const viewer = await getViewer("/pessoas");
+  await getViewer("/pessoas");
 
-  if (viewer.role === "USER") {
-    if (isUnlinkedUser(viewer)) return <UnlinkedBanner />;
-    // USER comum: vai direto para a própria pessoa
-    redirect(`/pessoas/${viewer.personId}`);
-  }
-
-  // Consultas agregadas (evita N+1): 1 lista + 2 groupBy
+  // Consultas agregadas (evita N+1): 1 lista + 2 groupBy — escopadas por dono.
   const [people, gastoByPerson, recvByPerson] = await Promise.all([
     prisma.person.findMany({ orderBy: { name: "asc" }, include: { user: true } }),
     prisma.transaction.groupBy({

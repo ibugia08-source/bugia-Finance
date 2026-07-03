@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWhatsAppSettings } from "@/lib/whatsapp/provider";
 import { sendReminders } from "@/lib/whatsapp/reminders";
+import { runWithOwner } from "@/lib/auth/owner-scope";
+import { getPrimaryAdminId } from "@/lib/auth/system-owner";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,8 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Secret inválido." }, { status: 401 });
   }
 
-  const r = await sendReminders();
+  const adminId = await getPrimaryAdminId();
+  const r = await runWithOwner(adminId, () => sendReminders());
   return NextResponse.json(r);
 }
 

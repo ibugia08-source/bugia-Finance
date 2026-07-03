@@ -5,10 +5,10 @@ import { InvoicesHistory } from "./invoices-history";
 import { DeleteBatchButton } from "./delete-actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 
 export default async function ImportarPage() {
-  await requireAdmin();
+  await getViewer();
   const [cards, accounts, batches, invoices] = await Promise.all([
     prisma.creditCard.findMany({ orderBy: { name: "asc" } }),
     prisma.account.findMany({ orderBy: { name: "asc" } }),

@@ -34,6 +34,8 @@ export async function loadRuleContext(): Promise<RuleContext> {
     new Set(rules.map((r) => r.responsibleName).filter(Boolean))
   ) as string[];
 
+  // person.findMany é escopado por dono pela extensão do Prisma → resolve
+  // apenas pessoas do próprio usuário.
   const people = names.length
     ? await prisma.person.findMany({
         where: { name: { in: names } },

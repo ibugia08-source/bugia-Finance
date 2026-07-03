@@ -9,7 +9,7 @@ import {
   type ImportRowInput,
 } from "@/lib/services/import-engine";
 import { invoiceReferenceFor, recalcInvoiceTotal } from "@/lib/services/invoices";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 import type { CreditCard } from "@prisma/client";
 
 export type PreviewRow = {
@@ -78,7 +78,7 @@ function toEngineRows(rows: ParsedRow[]): ImportRowInput[] {
 }
 
 export async function previewImport(formData: FormData): Promise<PreviewResult> {
-  await requireAdmin();
+  await getViewer();
   const file = formData.get("file") as File | null;
   const cardId = (formData.get("cardId") as string) || null;
   const accountId = (formData.get("accountId") as string) || null;
@@ -173,7 +173,7 @@ export type CommitResult =
   | { ok: false; error: string };
 
 export async function commitImport(formData: FormData): Promise<CommitResult> {
-  await requireAdmin();
+  await getViewer();
   const file = formData.get("file") as File | null;
   const cardId = (formData.get("cardId") as string) || null;
   const accountId = (formData.get("accountId") as string) || null;
@@ -255,7 +255,7 @@ export async function commitImport(formData: FormData): Promise<CommitResult> {
  * fatura que ficar vazia e sem pagamento registrado.
  */
 export async function deleteImportBatch(id: string) {
-  await requireAdmin();
+  await getViewer();
   const batch = await prisma.importBatch.findUnique({
     where: { id },
     select: { id: true, cardId: true },

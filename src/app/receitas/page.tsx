@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { IncomeDialog } from "./income-dialog";
 import { IncomeActions } from "./row-actions";
 import { IncomeFilters } from "./filters";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 
 type Search = {
   mes?: string;
@@ -58,7 +58,7 @@ function statusVariant(s: string): any {
 }
 
 export default async function ReceitasPage({ searchParams }: { searchParams: Search }) {
-  await requireAdmin();
+  await getViewer();
   const where: any = {};
   if (searchParams.mes) {
     const [y, m] = searchParams.mes.split("-").map(Number);

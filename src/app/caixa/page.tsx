@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { CashBoxDialog } from "./cashbox-dialog";
 import { CashBoxActions, MovementDeleteButton } from "./row-actions";
 import { MovementDialog } from "./movement-dialog";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 
 const TYPE_LABEL: Record<string, string> = {
   PERSONAL: "Caixa pessoal",
@@ -20,7 +20,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export default async function CaixaPage() {
-  await requireAdmin();
+  await getViewer();
   const [boxes, accounts] = await Promise.all([
     prisma.cashBox.findMany({
       orderBy: { createdAt: "asc" },

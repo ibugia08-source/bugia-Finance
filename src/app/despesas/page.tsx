@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { ExpenseDialog } from "./expense-dialog";
 import { ExpenseActions } from "./row-actions";
 import { ExpenseFilters } from "./filters";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 
 type Search = { mes?: string; status?: string; pessoa?: string };
 
@@ -44,7 +44,7 @@ function statusInfo(status: string, dueDate: Date | null): { label: string; vari
 }
 
 export default async function DespesasPage({ searchParams }: { searchParams: Search }) {
-  await requireAdmin();
+  await getViewer();
 
   const ref = parseMonthRef(searchParams.mes);
   const { start, end } = monthRange(ref);

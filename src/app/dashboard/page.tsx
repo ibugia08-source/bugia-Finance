@@ -4,9 +4,7 @@ import { getDashboardSummary } from "@/lib/services/calculations";
 import { formatBRL, monthLabel } from "@/lib/format";
 import { Card, CardContent } from "@/lib/ui";
 import { Badge } from "@/components/ui/badge";
-import { getViewer, isUnlinkedUser } from "@/lib/auth/viewer";
-import { UnlinkedBanner } from "@/components/unlinked-banner";
-import { UserDashboard } from "./user-dashboard";
+import { getViewer } from "@/lib/auth/viewer";
 import { DashboardMonthFilter } from "./month-filter";
 import { MonthlyBarChart } from "@/components/bar-chart";
 import { getMonthlyHistory } from "@/lib/services/history";
@@ -41,11 +39,9 @@ export default async function DashboardPage({
 }: {
   searchParams?: { mes?: string };
 }) {
-  const viewer = await getViewer("/dashboard");
-  if (viewer.role === "USER") {
-    if (isUnlinkedUser(viewer)) return <UnlinkedBanner />;
-    return <UserDashboard personId={viewer.personId!} name={viewer.name} />;
-  }
+  // Multiusuário: todos veem o mesmo dashboard, já escopado aos próprios
+  // dados pela extensão do Prisma (getViewer só garante login).
+  await getViewer("/dashboard");
 
   const ref = parseMonthRef(searchParams?.mes);
   const [summary, history] = await Promise.all([

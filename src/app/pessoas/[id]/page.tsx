@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -25,8 +25,7 @@ import {
 import { PaymentDeleteButton } from "./payment-row-actions";
 import { LinkUserPicker } from "./link-user";
 import { PersonMonthFilter } from "./month-filter";
-import { getViewer, isUnlinkedUser } from "@/lib/auth/viewer";
-import { UnlinkedBanner } from "@/components/unlinked-banner";
+import { getViewer } from "@/lib/auth/viewer";
 
 function parseMonthRef(mes?: string): Date {
   if (mes && /^\d{4}-\d{2}$/.test(mes)) {
@@ -71,14 +70,8 @@ export default async function PersonDetailPage({
 }) {
   const viewer = await getViewer(`/pessoas/${params.id}`);
 
-  if (viewer.role === "USER") {
-    if (isUnlinkedUser(viewer)) return <UnlinkedBanner />;
-    if (viewer.personId !== params.id) {
-      // USER comum só vê a própria pessoa
-      redirect(`/pessoas/${viewer.personId}`);
-    }
-  }
-
+  // findUnique é pós-filtrado por dono (extensão) → pessoa de outro usuário
+  // resolve para null e cai em notFound.
   const person = await prisma.person.findUnique({
     where: { id: params.id },
     include: { user: true },

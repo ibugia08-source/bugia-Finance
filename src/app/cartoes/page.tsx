@@ -15,10 +15,10 @@ import {
   parcelasFuturasEstimadasPorCartao,
 } from "@/lib/services/calculations";
 import { ArrowRight } from "lucide-react";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 
 export default async function CartoesPage() {
-  await requireAdmin();
+  await getViewer();
   const [cards, people, accounts] = await Promise.all([
     prisma.creditCard.findMany({
       orderBy: { name: "asc" },

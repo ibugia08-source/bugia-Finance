@@ -3,10 +3,10 @@ import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { RuleDialog } from "./rule-dialog";
 import { RulesList } from "./rules-list";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 
 export default async function RegrasPage() {
-  await requireAdmin();
+  await getViewer();
   const [rules, categories, cards] = await Promise.all([
     prisma.categorizationRule.findMany({
       orderBy: { priority: "asc" },

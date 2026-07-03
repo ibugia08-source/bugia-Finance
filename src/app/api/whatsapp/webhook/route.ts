@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getWhatsAppSettings, isAllowedSender, sendText } from "@/lib/whatsapp/provider";
 import { parseIncoming } from "@/lib/whatsapp/parse";
 import { runAgent } from "@/lib/whatsapp/agent";
+import { runWithOwner } from "@/lib/auth/owner-scope";
+import { getPrimaryAdminId } from "@/lib/auth/system-owner";
 
 export const dynamic = "force-dynamic";
 
@@ -51,8 +53,11 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // agente decide e executa
-  const result = await runAgent({ text: msg.text, imageUrl: msg.imageUrl, from: msg.from });
+  // agente decide e executa (age sobre os dados do admin primário)
+  const adminId = await getPrimaryAdminId();
+  const result = await runWithOwner(adminId, () =>
+    runAgent({ text: msg.text, imageUrl: msg.imageUrl, from: msg.from })
+  );
 
   // responde no WhatsApp
   await sendText(msg.from!, result.reply);

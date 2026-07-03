@@ -4,10 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { formatBRL } from "@/lib/format";
 import { GoalDialog } from "./goal-dialog";
 import { GoalsGrid, type GoalRow } from "./goals-grid";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 
 export default async function MetasPage() {
-  await requireAdmin();
+  await getViewer();
   const goals = await prisma.goal.findMany({
     orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
   });

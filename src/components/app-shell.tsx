@@ -28,7 +28,7 @@ export function AppShell({
           {children}
         </main>
       </div>
-      <MobileNav user={user} />
+      <MobileNav />
     </>
   );
 }

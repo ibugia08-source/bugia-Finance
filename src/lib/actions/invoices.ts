@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { parseBRL } from "@/lib/format";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 
 export async function payInvoice(formData: FormData) {
   const id = String(formData.get("id"));
@@ -31,7 +31,7 @@ export async function setInvoiceStatus(id: string, status: string) {
  * Usado para desfazer uma importação de fatura inteira.
  */
 export async function deleteInvoice(id: string) {
-  await requireAdmin();
+  await getViewer();
   const inv = await prisma.creditCardInvoice.findUnique({
     where: { id },
     select: { id: true, cardId: true },

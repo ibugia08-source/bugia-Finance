@@ -10,7 +10,7 @@ import {
   type PdfParseResult,
 } from "@/lib/pdf/parse-invoice-pdf";
 import { matchCardsByIssuer } from "@/lib/pdf/detect-issuer";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 import {
   analyzeImportRows,
   commitAnalyzedRows,
@@ -110,7 +110,7 @@ function toEngineRows(transactions: PdfTransaction[]): ImportRowInput[] {
 }
 
 export async function previewPdfImport(formData: FormData): Promise<PdfPreviewResult> {
-  await requireAdmin();
+  await getViewer();
   const file = formData.get("file") as File | null;
   const explicitCardId = (formData.get("cardId") as string) || "";
   if (!file) return { ok: false, error: "Arquivo ausente." };
@@ -211,7 +211,7 @@ export type PdfCommitResult =
   | { ok: false; error: string };
 
 export async function commitPdfImport(formData: FormData): Promise<PdfCommitResult> {
-  await requireAdmin();
+  await getViewer();
   const file = formData.get("file") as File | null;
   const cardId = (formData.get("cardId") as string) || "";
   const referenceInput = parseReferenceInput((formData.get("reference") as string) || null);
