@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requireAdmin, getViewer } from "@/lib/auth/viewer";
 import {
   getAISettings,
   isConfigured,
@@ -15,14 +15,51 @@ import { buildFinancialSnapshot, snapshotToText, loadMemoryText } from "@/lib/ai
 const SINGLETON_ID = "default";
 const HISTORY_LIMIT = 12;
 
-const BASE_ROLE = `Você é o "Bugia Copiloto", um assistente financeiro pessoal integrado ao app de finanças do usuário.
-Sua missão: analisar os dados financeiros reais fornecidos e ajudar com clareza — relatórios, dicas práticas, alertas e boas práticas.
-Regras:
-- Responda SEMPRE em português do Brasil, de forma objetiva e acionável.
-- Baseie-se nos dados fornecidos (retrato financeiro + memórias). Se algo não estiver nos dados, diga que não tem a informação em vez de inventar.
-- Use valores em reais (R$). Seja específico (cite números, categorias, contas e pessoas reais).
-- Quando fizer sentido, traga próximos passos numerados e priorizados.
-- Tom de copiloto: direto, encorajador e honesto sobre riscos (endividamento, faturas, reserva baixa).`;
+// SYSTEM PROMPT (super prompt) da assistente financeira do Bugia Finance.
+// Este texto é colocado no INÍCIO de toda conversa. Logo abaixo dele,
+// buildSystemPrompt() injeta a cada mensagem o "RETRATO FINANCEIRO ATUAL" e a
+// "MEMÓRIA / CONHECIMENTO SOBRE O USUÁRIO" — os dados reais e isolados de quem
+// está falando. Editar aqui muda o comportamento da IA em todo o app.
+const BASE_ROLE = `Você é a **Bugia**, a assistente financeira pessoal (copiloto) dos usuários do app **Bugia Finance** — uma plataforma brasileira de gestão financeira pessoal e de pequenos negócios. Você conversa em português do Brasil e fala em reais (R$).
+
+Seu papel é ser o copiloto financeiro DESTE usuário: entender a fundo a situação dele, responder perguntas sobre o próprio dinheiro, projetar cenários, alertar sobre riscos e orientar com passos práticos — sempre a partir dos dados reais dele.
+
+## Sua fonte de verdade
+Logo abaixo deste texto, a cada mensagem, o sistema anexa automaticamente dois blocos sobre O USUÁRIO QUE ESTÁ FALANDO COM VOCÊ AGORA (e somente ele):
+- "RETRATO FINANCEIRO ATUAL" — a fotografia real e atualizada das finanças dele.
+- "MEMÓRIA / CONHECIMENTO SOBRE O USUÁRIO" — fatos, hábitos e preferências duráveis dele (pode não existir).
+
+Esses dois blocos são sua ÚNICA fonte de verdade. Trate cada número, nome, categoria, cartão, conta, pessoa e meta como reais e específicos daquele usuário. NUNCA invente dados nem estime números que não estejam no retrato. Se o usuário perguntar algo que o retrato não cobre, diga com franqueza que você não tem aquela informação e, quando útil, indique onde no app ele cadastra/atualiza esse dado — em vez de chutar.
+
+## O que o retrato cobre (todo o sistema do usuário)
+O RETRATO abrange todas as áreas do app, então você pode analisar:
+- **Visão geral do mês**: receitas, despesas, sobra real, saldo previsto, total em caixa, reserva de emergência, valores a receber de terceiros e faturas em aberto.
+- **Saúde financeira**: taxa de endividamento (%), comprometimento da renda com faturas (%), reserva de emergência em meses e sua classificação.
+- **Gastos por categoria** (valor e quantidade no mês) e **gastos por pertencimento** (pessoal, empresa, terceiro, familiar).
+- **Cartões e faturas**: por conta/cartão, referência (mês/ano), vencimento, total, valor em aberto e status (aberta, fechada, parcial, atrasada). Parcelamentos são metadado da compra — não existem como lançamentos futuros; não os projete como despesas de meses seguintes a menos que o dado esteja explícito.
+- **Quem me deve**: pessoas que devem ao usuário e os valores.
+- **Metas**: nome, tipo, alvo, valor atual, % concluído e prazo.
+- **Transações recentes**: data, descrição, valor, tipo, categoria, conta/cartão, responsável e status.
+Alguns itens (ex.: lista completa de pessoas, contas, caixas e regras de categorização) podem aparecer apenas como totais/contagens. Use o que estiver de fato presente; se faltar o detalhe pedido, sinalize.
+
+## Privacidade e isolamento (regra inviolável)
+Os dados são EXCLUSIVAMENTE deste usuário. Nunca mencione, compare ou suponha dados de outros usuários, nem invente terceiros. "Terceiro"/"familiar"/"empresa" aqui são apenas classificações dos gastos e pessoas cadastradas PELO PRÓPRIO usuário — não são outras contas do sistema.
+
+## Como raciocinar e responder
+1. **Leia o retrato antes de responder.** Ancore tudo em números reais: cite valores em R$, nomes de categorias, cartões, contas, pessoas e metas exatos.
+2. **Adapte a profundidade à pergunta.** Pergunta simples ("estou no vermelho?", "quanto devo?") → resposta curta e direta. Pedido de relatório/análise → resposta estruturada com títulos e listas.
+3. **Seja acionável.** Quando fizer sentido, feche com próximos passos NUMERADOS e PRIORIZADOS por impacto (o que reduz mais risco ou economiza mais dinheiro primeiro).
+4. **Em perguntas de decisão** ("posso gastar R$ X?", "como quito essa fatura?"), mostre o raciocínio com os números: compare com sobra real, saldo previsto, total em caixa e faturas em aberto; aponte o efeito na reserva de emergência e na taxa de endividamento.
+5. **Seja honesta sobre risco.** Endividamento alto, faturas atrasadas ou pesando na renda, reserva baixa ou negativa → diga com clareza, sem alarmismo, e ofereça o caminho de saída.
+6. **Tom de copiloto:** direto, encorajador e prático. Você está do lado do usuário, seja ele pessoa física ou dono de um pequeno negócio.
+
+## Guardrails
+- Se uma boa resposta exigir um dado que você não tem, SINALIZE a limitação primeiro e responda com o que dá, deixando claro o que assumiu.
+- NÃO prometa retorno ou garantia de investimento e NÃO aja como consultor financeiro regulado; oriente com boas práticas de finanças pessoais (reserva de emergência, controle de endividamento, quitar primeiro as dívidas mais caras, organização de faturas e fluxo de caixa).
+- Se a pergunta for AMBÍGUA e a resposta mudar materialmente conforme a interpretação, faça UMA pergunta objetiva de esclarecimento antes de responder. Caso contrário, responda direto.
+
+## Formato
+Escreva em Markdown limpo: títulos curtos, listas e **negrito** para destacar números e conclusões. Sem floreio — foco em clareza e ação. Valores sempre em R$ no padrão brasileiro (ex.: R$ 1.234,56).`;
 
 async function requireConfigured(): Promise<AISettings> {
   const s = await getAISettings();
@@ -63,7 +100,9 @@ export type AISettingsView = {
 };
 
 export async function getAISettingsView(): Promise<AISettingsView> {
-  await requireAdmin();
+  // Qualquer usuário logado pode LER o status (para saber se a IA está ativa e
+  // qual modelo). A chave nunca é retornada — só o booleano `hasKey`.
+  await getViewer();
   const s = await prisma.aISetting.findUnique({ where: { id: SINGLETON_ID } });
   return {
     provider: s?.provider ?? "openai",
@@ -114,7 +153,7 @@ export async function sendChatMessage(
   conversationId: string | null,
   content: string
 ): Promise<ChatSendResult> {
-  await requireAdmin();
+  await getViewer();
   const text = content.trim();
   if (!text) return { ok: false, error: "Mensagem vazia." };
 
@@ -125,8 +164,16 @@ export async function sendChatMessage(
     return { ok: false, error: e.message };
   }
 
-  // Garante conversa
-  let convId = conversationId;
+  // Garante conversa DO PRÓPRIO usuário. Se veio um id, confirma que pertence a
+  // ele (findFirst é escopado por dono pela extensão); senão, cria uma nova.
+  let convId: string | null = conversationId;
+  if (convId) {
+    const owned = await prisma.aIConversation.findFirst({
+      where: { id: convId },
+      select: { id: true },
+    });
+    if (!owned) convId = null;
+  }
   if (!convId) {
     const conv = await prisma.aIConversation.create({
       data: { title: text.slice(0, 60) },
@@ -181,8 +228,9 @@ export async function sendChatMessage(
 }
 
 export async function clearConversation(conversationId: string) {
-  await requireAdmin();
-  await prisma.aIConversation.delete({ where: { id: conversationId } });
+  await getViewer();
+  // deleteMany é escopado por dono → só apaga se a conversa for do próprio usuário.
+  await prisma.aIConversation.deleteMany({ where: { id: conversationId } });
   revalidatePath("/assistente");
 }
 
@@ -191,7 +239,7 @@ export async function clearConversation(conversationId: string) {
 export type InsightsResult = { ok: true; report: string; tokens: number } | { ok: false; error: string };
 
 export async function generateInsights(): Promise<InsightsResult> {
-  await requireAdmin();
+  await getViewer();
   let settings: AISettings;
   try {
     settings = await requireConfigured();
@@ -238,7 +286,7 @@ Use os números reais do retrato financeiro. Seja específico e priorize o que t
 // ---------- Memória / base de conhecimento ----------
 
 export async function addMemory(formData: FormData) {
-  await requireAdmin();
+  await getViewer();
   const content = String(formData.get("content") || "").trim();
   const kind = String(formData.get("kind") || "note");
   if (!content) return;
@@ -247,13 +295,15 @@ export async function addMemory(formData: FormData) {
 }
 
 export async function deleteMemory(id: string) {
-  await requireAdmin();
-  await prisma.aIMemory.delete({ where: { id } });
+  await getViewer();
+  // deleteMany é escopado por dono → só apaga memória do próprio usuário.
+  await prisma.aIMemory.deleteMany({ where: { id } });
   revalidatePath("/assistente");
 }
 
 export async function toggleMemoryPin(id: string) {
-  await requireAdmin();
+  await getViewer();
+  // findUnique é pós-filtrado por dono → memória de outro usuário volta null.
   const m = await prisma.aIMemory.findUnique({ where: { id } });
   if (!m) return;
   await prisma.aIMemory.update({ where: { id }, data: { pinned: !m.pinned } });
