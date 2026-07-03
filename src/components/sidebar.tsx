@@ -54,7 +54,7 @@ export function Sidebar({
     (it) => !it.adminOnly || user?.role === "ADMIN"
   );
   return (
-    <aside className="hidden md:flex md:w-72 flex-col border-r bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+    <aside className="hidden md:flex md:w-72 shrink-0 flex-col md:sticky md:top-0 md:h-screen md:self-start border-r bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="px-6 py-5 border-b">
         <div className="flex items-center gap-3">
           <BugiaSymbol size={38} />
