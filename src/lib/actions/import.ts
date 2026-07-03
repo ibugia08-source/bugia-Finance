@@ -8,7 +8,7 @@ import {
   type ImportReference,
   type ImportRowInput,
 } from "@/lib/services/import-engine";
-import { invoiceReferenceFor } from "@/lib/services/invoices";
+import { invoiceReferenceFor, recalcInvoiceTotal } from "@/lib/services/invoices";
 import { requireAdmin } from "@/lib/auth/viewer";
 import type { CreditCard } from "@prisma/client";
 
@@ -247,4 +247,53 @@ export async function commitImport(formData: FormData): Promise<CommitResult> {
     total: diag.totalLines,
     reference: outcome.reference,
   };
+}
+
+/**
+ * Exclui (desfaz) uma importação inteira: remove as transações do lote
+ * (com recebíveis vinculados), recalcula as faturas afetadas — e apaga a
+ * fatura que ficar vazia e sem pagamento registrado.
+ */
+export async function deleteImportBatch(id: string) {
+  await requireAdmin();
+  const batch = await prisma.importBatch.findUnique({
+    where: { id },
+    select: { id: true, cardId: true },
+  });
+  if (!batch) return;
+
+  const txs = await prisma.transaction.findMany({
+    where: { importBatchId: id },
+    select: { id: true, invoiceId: true },
+  });
+  const txIds = txs.map((t) => t.id);
+  const invoiceIds = Array.from(
+    new Set(txs.map((t) => t.invoiceId).filter(Boolean))
+  ) as string[];
+
+  await prisma.$transaction([
+    prisma.receivable.deleteMany({ where: { transactionId: { in: txIds } } }),
+    prisma.transaction.deleteMany({ where: { id: { in: txIds } } }),
+    prisma.importBatch.delete({ where: { id } }),
+  ]);
+
+  // Faturas afetadas: recalcula; se ficou vazia e sem pagamento, remove.
+  for (const invId of invoiceIds) {
+    const [remaining, inv] = await Promise.all([
+      prisma.transaction.count({ where: { invoiceId: invId } }),
+      prisma.creditCardInvoice.findUnique({ where: { id: invId } }),
+    ]);
+    if (!inv) continue;
+    if (remaining === 0 && inv.paid <= 0) {
+      await prisma.creditCardInvoice.delete({ where: { id: invId } });
+    } else {
+      await recalcInvoiceTotal(invId);
+    }
+  }
+
+  revalidatePath("/importar");
+  revalidatePath("/transacoes");
+  revalidatePath("/cartoes");
+  if (batch.cardId) revalidatePath(`/cartoes/${batch.cardId}`);
+  revalidatePath("/dashboard");
 }

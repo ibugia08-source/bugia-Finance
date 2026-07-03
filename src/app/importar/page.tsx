@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
 import { ImportForm } from "./import-form";
 import { InvoicesHistory } from "./invoices-history";
+import { DeleteBatchButton } from "./delete-actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { requireAdmin } from "@/lib/auth/viewer";
@@ -48,15 +49,22 @@ export default async function ImportarPage() {
                 ) : (
                   <ul className="text-sm space-y-2">
                     {batches.map((b) => (
-                      <li key={b.id} className="flex justify-between border-b py-2 last:border-0">
-                        <span>
+                      <li
+                        key={b.id}
+                        className="flex items-center justify-between gap-2 border-b py-2 last:border-0"
+                      >
+                        <span className="min-w-0 truncate">
                           <span className="font-medium">{b.fileName ?? b.source}</span>{" "}
                           <span className="text-muted-foreground">
                             ({new Date(b.createdAt).toLocaleString("pt-BR")})
                           </span>
                         </span>
-                        <span className="text-muted-foreground">
+                        <span className="flex items-center gap-2 shrink-0 text-muted-foreground">
                           {b.imported}/{b.total} importadas · {b.duplicates} duplicatas
+                          <DeleteBatchButton
+                            batchId={b.id}
+                            label={b.fileName ?? b.source}
+                          />
                         </span>
                       </li>
                     ))}

@@ -21,6 +21,7 @@ import {
   parcelasFuturasEstimadasPorCartao,
 } from "@/lib/services/calculations";
 import { InvoiceImportDialog } from "../invoice-import-dialog";
+import { DeleteInvoiceButton } from "../../importar/delete-actions";
 import { ResponsibleSelect } from "./responsible-select";
 import { CardDetailFilters } from "./month-filter";
 import { AccountCardsSection } from "./account-cards-section";
@@ -248,12 +249,13 @@ export default async function CardDetailPage({
                 <TableHead className="text-right">Pago</TableHead>
                 <TableHead className="text-right">Em aberto</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {invoices.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     Sem faturas geradas ainda. Importe transações para criar faturas.
                   </TableCell>
                 </TableRow>
@@ -274,6 +276,12 @@ export default async function CardDetailPage({
                     <Badge variant={invoiceStatusVariant(inv.status)} className="capitalize">
                       {inv.status}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DeleteInvoiceButton
+                      invoiceId={inv.id}
+                      label={`${String(inv.referenceMonth).padStart(2, "0")}/${inv.referenceYear} — ${card.name}`}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

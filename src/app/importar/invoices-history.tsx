@@ -2,6 +2,7 @@ import { formatBRL, formatDateBR } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { PayInvoiceDialog } from "../faturas/pay-dialog";
+import { DeleteInvoiceButton } from "./delete-actions";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -62,7 +63,13 @@ export function InvoicesHistory({ invoices }: { invoices: any[] }) {
               </Badge>
             </TableCell>
             <TableCell className="text-right">
-              <PayInvoiceDialog invoice={inv} />
+              <div className="flex items-center justify-end gap-1">
+                <PayInvoiceDialog invoice={inv} />
+                <DeleteInvoiceButton
+                  invoiceId={inv.id}
+                  label={`${MESES[inv.referenceMonth - 1]}/${inv.referenceYear} — ${inv.card.name}`}
+                />
+              </div>
             </TableCell>
           </TableRow>
         ))}
