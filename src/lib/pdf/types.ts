@@ -4,6 +4,8 @@ export type PdfTransaction = {
   amount: number;
   installment?: number | null;
   totalInstallments?: number | null;
+  /** Final (4 dígitos) do cartão físico/virtual, quando a fatura agrupa por cartão. */
+  cardLastDigits?: string | null;
 };
 
 export type PdfParseResult = {

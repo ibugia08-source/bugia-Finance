@@ -93,6 +93,8 @@ model AccountCard {
   notes         String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  transactions  Transaction[]
 }
 
 model Category {
@@ -140,6 +142,27 @@ model Transaction {
   installments    Installment[]
   receivables     Receivable[]
   hash            String?       @unique
+
+  // ===== Parcelamento como METADADO da transação (fatura real importada) =====
+  // "AMAZON 3/10" → installmentNumber=3, installmentTotal=10. NÃO gera
+  // parcelas/faturas futuras no banco; projeções são calculadas em memória.
+  installmentNumber   Int?
+  installmentTotal    Int?
+  // Chave do grupo de parcelamento (mesma compra ao longo dos meses):
+  // sha1(cartão + descrição normalizada + valor da parcela + total de parcelas).
+  installmentGroupKey String?
+  // true quando categoria/pessoa/contexto foram herdados de uma parcela
+  // anterior reconhecida pelo histórico.
+  historyMatched      Boolean   @default(false)
+
+  // Cartão físico/virtual dentro da conta (identificado pelo final do cartão
+  // na fatura, quando possível; fallback manual).
+  accountCardId   String?
+  accountCard     AccountCard?  @relation(fields: [accountCardId], references: [id])
+
+  // Preparação Open Finance: id do registro no sistema de origem.
+  externalId      String?
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -147,6 +170,10 @@ model Transaction {
   @@index([cardId])
   @@index([categoryId])
   @@index([responsibleId])
+  @@index([invoiceId])
+  @@index([status])
+  @@index([installmentGroupKey])
+  @@index([accountCardId])
 }
 
 model Installment {
@@ -161,6 +188,10 @@ model Installment {
   invoiceId       String?
   invoice         CreditCardInvoice? @relation(fields: [invoiceId], references: [id])
   createdAt       DateTime    @default(now())
+
+  @@index([transactionId])
+  @@index([paid, dueDate])
+  @@index([invoiceId])
 }
 
 model CreditCardInvoice {
@@ -173,7 +204,11 @@ model CreditCardInvoice {
   dueDate         DateTime
   total           Float         @default(0)
   paid            Float         @default(0)
+  // Total declarado no PDF da fatura (para conferência com a soma importada).
+  declaredTotal   Float?
   status          String        @default("aberta") // aberta | fechada | paga | atrasada | parcial
+  // Preparação Open Finance: id da fatura no sistema de origem.
+  externalId      String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -181,6 +216,8 @@ model CreditCardInvoice {
   installments    Installment[]
 
   @@unique([cardId, referenceYear, referenceMonth])
+  @@index([status])
+  @@index([dueDate])
 }
 
 model Receivable {
@@ -290,10 +327,14 @@ model Goal {
 
 model ImportBatch {
   id              String        @id @default(cuid())
-  source          String        // csv | xlsx
+  source          String        // csv | xlsx | pdf
   fileName        String?
   cardId          String?
   accountId       String?
+  // Fatura âncora desta importação (quando importado para um cartão/conta).
+  invoiceId       String?
+  referenceMonth  Int?
+  referenceYear   Int?
   total           Int           @default(0)
   imported        Int           @default(0)
   duplicates      Int           @default(0)

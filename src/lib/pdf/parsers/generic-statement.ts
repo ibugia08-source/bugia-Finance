@@ -1,4 +1,5 @@
 import type { PdfParseResult, PdfTransaction } from "../types";
+import { matchCardSection, adjustYearToAnchor } from "./shared";
 
 /**
  * Parser genérico de extrato — captura lançamentos com data + descrição + valor
@@ -132,15 +133,23 @@ function preprocessLines(text: string): string[] {
 export function tryGenericStatement(text: string): PdfParseResult & {
   sampleLines: string[];
 } {
-  const fallbackYear = detectYear(text);
+  const meta = detectClosingAndDue(text);
+  const anchor = meta.closing ?? meta.due;
+  const fallbackYear = anchor?.getFullYear() ?? detectYear(text);
   const lines = preprocessLines(text);
 
   const transactions: PdfTransaction[] = [];
   const ignored: string[] = [];
+  let currentCardDigits: string | null = null;
 
   for (const line of lines) {
     const m = line.match(LINE_RE);
     if (!m) {
+      const digits = matchCardSection(line);
+      if (digits) {
+        currentCardDigits = digits;
+        continue;
+      }
       // Filtra linhas curtas ou de cabeçalho — só registra como ignorada se
       // parecer relevante (tem números no fim).
       if (/\d{1,3}[\.,]\d{2}\s*$/.test(line)) ignored.push(line);
@@ -163,12 +172,16 @@ export function tryGenericStatement(text: string): PdfParseResult & {
         .replace(/[̀-ͯ]/g, "")
         .slice(0, 3);
       if (k in MONTHS_PT) {
-        date = new Date(fallbackYear, MONTHS_PT[k], Number(ddText));
+        date = adjustYearToAnchor(
+          new Date(fallbackYear, MONTHS_PT[k], Number(ddText)),
+          anchor
+        );
       }
     } else if (ddNum && mmNum) {
       let y = fallbackYear;
       if (yyOpt) y = Number(yyOpt.length === 2 ? "20" + yyOpt : yyOpt);
       date = new Date(y, Number(mmNum) - 1, Number(ddNum));
+      if (!yyOpt) date = adjustYearToAnchor(date, anchor);
     }
     if (!date || isNaN(date.getTime())) {
       ignored.push(line);
@@ -188,10 +201,10 @@ export function tryGenericStatement(text: string): PdfParseResult & {
       amount: Math.abs(amount),
       installment: inst.installment,
       totalInstallments: inst.total,
+      cardLastDigits: currentCardDigits,
     });
   }
 
-  const meta = detectClosingAndDue(text);
   return {
     layout: "generic-statement",
     transactions,

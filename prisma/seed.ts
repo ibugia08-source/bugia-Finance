@@ -127,53 +127,37 @@ async function main() {
     console.log(`  • admin já existe: ${ADMIN.email}`);
   }
 
+  // IMPORTANTE: o seed é CREATE-ONLY — nunca sobrescreve dados existentes
+  // (limites, dias de fechamento, tipos etc. editados pelo usuário).
+  // Roda apenas manualmente via `npm run db:seed`.
   console.log("→ Seed: pessoas");
   for (const p of PEOPLE) {
-    await prisma.person.upsert({
-      where: { name: p.name },
-      update: { type: p.type },
-      create: p,
-    });
+    const exists = await prisma.person.findUnique({ where: { name: p.name } });
+    if (!exists) await prisma.person.create({ data: p });
   }
 
   console.log("→ Seed: categorias");
   for (const c of CATEGORIES) {
-    await prisma.category.upsert({
-      where: { name: c.name },
-      update: { color: c.color, kind: c.kind },
-      create: c,
-    });
+    const exists = await prisma.category.findUnique({ where: { name: c.name } });
+    if (!exists) await prisma.category.create({ data: c });
   }
 
   console.log("→ Seed: cartões");
   for (const c of CARDS) {
-    const holder = await prisma.person.findUnique({ where: { name: c.holder } });
     const exists = await prisma.creditCard.findFirst({ where: { name: c.name } });
-    if (exists) {
-      await prisma.creditCard.update({
-        where: { id: exists.id },
-        data: {
-          bank: c.bank,
-          type: c.type,
-          holderId: holder?.id,
-          limitTotal: c.limitTotal,
-          closingDay: c.closingDay,
-          dueDay: c.dueDay,
-        },
-      });
-    } else {
-      await prisma.creditCard.create({
-        data: {
-          name: c.name,
-          bank: c.bank,
-          type: c.type,
-          holderId: holder?.id,
-          limitTotal: c.limitTotal,
-          closingDay: c.closingDay,
-          dueDay: c.dueDay,
-        },
-      });
-    }
+    if (exists) continue;
+    const holder = await prisma.person.findUnique({ where: { name: c.holder } });
+    await prisma.creditCard.create({
+      data: {
+        name: c.name,
+        bank: c.bank,
+        type: c.type,
+        holderId: holder?.id,
+        limitTotal: c.limitTotal,
+        closingDay: c.closingDay,
+        dueDay: c.dueDay,
+      },
+    });
   }
 
   console.log("→ Seed: conta padrão");
@@ -186,29 +170,18 @@ async function main() {
 
   console.log("→ Seed: regras");
   for (const r of RULES) {
-    const cat = await prisma.category.findUnique({ where: { name: r.categoryName } });
     const exists = await prisma.categorizationRule.findFirst({ where: { name: r.name } });
-    if (exists) {
-      await prisma.categorizationRule.update({
-        where: { id: exists.id },
-        data: {
-          priority: r.priority,
-          descriptionContains: r.descriptionContains,
-          categoryId: cat?.id,
-          belongsTo: r.belongsTo,
-        },
-      });
-    } else {
-      await prisma.categorizationRule.create({
-        data: {
-          name: r.name,
-          priority: r.priority,
-          descriptionContains: r.descriptionContains,
-          categoryId: cat?.id,
-          belongsTo: r.belongsTo,
-        },
-      });
-    }
+    if (exists) continue;
+    const cat = await prisma.category.findUnique({ where: { name: r.categoryName } });
+    await prisma.categorizationRule.create({
+      data: {
+        name: r.name,
+        priority: r.priority,
+        descriptionContains: r.descriptionContains,
+        categoryId: cat?.id,
+        belongsTo: r.belongsTo,
+      },
+    });
   }
 
   console.log("✓ Seed concluído");

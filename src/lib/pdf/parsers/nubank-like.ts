@@ -1,4 +1,5 @@
 import type { PdfParseResult, PdfTransaction } from "../types";
+import { matchCardSection, adjustYearToAnchor } from "./shared";
 
 /**
  * Parser "nubank-like" — fatura típica do Nubank e bancos digitais.
@@ -60,13 +61,24 @@ export function tryNubankLike(text: string): PdfParseResult | null {
     .map((l) => l.trim())
     .filter(Boolean);
 
-  const year = detectYear(text);
+  // Âncora de ano: datas reais da fatura (fechamento/vencimento) quando
+  // detectadas — evita atribuir o ano errado em faturas na virada do ano.
+  const { closing, due } = detectClosingAndDue(text);
+  const anchor = closing ?? due;
+  const year = anchor?.getFullYear() ?? detectYear(text);
+
   const transactions: PdfTransaction[] = [];
   const ignored: string[] = [];
+  let currentCardDigits: string | null = null;
 
   for (const line of lines) {
     const m = line.match(LINE_RE);
-    if (!m) continue;
+    if (!m) {
+      // Cabeçalho de seção por cartão ("CARTÃO •••• 1234")?
+      const digits = matchCardSection(line);
+      if (digits) currentCardDigits = digits;
+      continue;
+    }
     const [, dd, mmm, descRaw, amountStr] = m;
     const monthKey = mmm
       .toLowerCase()
@@ -78,7 +90,7 @@ export function tryNubankLike(text: string): PdfParseResult | null {
       continue;
     }
     const monthIdx = MONTHS_PT[monthKey];
-    const date = new Date(year, monthIdx, Number(dd));
+    const date = adjustYearToAnchor(new Date(year, monthIdx, Number(dd)), anchor);
     const amount = Math.abs(parseAmount(amountStr));
     if (!amount) continue;
 
@@ -93,12 +105,18 @@ export function tryNubankLike(text: string): PdfParseResult | null {
       description = description.replace(INSTALLMENT_RE, "").trim();
     }
 
-    transactions.push({ date, description, amount, installment, totalInstallments });
+    transactions.push({
+      date,
+      description,
+      amount,
+      installment,
+      totalInstallments,
+      cardLastDigits: currentCardDigits,
+    });
   }
 
   if (transactions.length === 0) return null;
 
-  const { closing, due } = detectClosingAndDue(text);
   return {
     layout: "nubank-like",
     transactions,

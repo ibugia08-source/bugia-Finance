@@ -30,6 +30,19 @@ import { createBankAccountQuick } from "@/lib/actions/cards";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { FileUp, Sparkles, Plus } from "lucide-react";
 
+/** {referenceMonth, referenceYear} → "YYYY-MM" (input type="month") */
+function refToInput(
+  ref: { referenceMonth: number; referenceYear: number } | null | undefined
+) {
+  if (!ref) return "";
+  return `${ref.referenceYear}-${String(ref.referenceMonth).padStart(2, "0")}`;
+}
+
+function refLabel(value: string) {
+  const m = value.match(/^(\d{4})-(\d{2})$/);
+  return m ? `${m[2]}/${m[1]}` : value;
+}
+
 export function ImportForm({ cards, accounts }: { cards: any[]; accounts: any[] }) {
   return (
     <Tabs defaultValue="pdf">
@@ -56,6 +69,7 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
   const [localCards, setLocalCards] = useState<any[]>(cards);
   const [file, setFile] = useState<File | null>(null);
   const [cardId, setCardId] = useState("");
+  const [reference, setReference] = useState("");
   const [preview, setPreview] = useState<PdfPreviewResult | null>(null);
   const [pending, start] = useTransition();
   const [result, setResult] = useState<string | null>(null);
@@ -72,6 +86,7 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
     const fd = new FormData();
     if (file) fd.set("file", file);
     if (withCard && cardId) fd.set("cardId", cardId);
+    if (reference) fd.set("reference", reference);
     return fd;
   }
 
@@ -85,6 +100,7 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
       setResult(null);
       if (r.ok && r.suggestedCardId) setCardId(r.suggestedCardId);
       else setCardId("");
+      if (r.ok) setReference(refToInput(r.suggestedReference));
     });
   }
 
@@ -98,6 +114,7 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
       fd.set("cardId", id);
       const r = await previewPdfImport(fd);
       setPreview(r);
+      if (r.ok && r.suggestedReference) setReference(refToInput(r.suggestedReference));
     });
   }
 
@@ -183,6 +200,19 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
                 </p>
               )}
             </div>
+            <div>
+              <Label className="text-xs">Fatura de referência (mês)</Label>
+              <Input
+                type="month"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                className="max-w-[200px]"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Todas as compras do PDF entram nessa fatura — detectada pelo
+                vencimento; ajuste se necessário.
+              </p>
+            </div>
           </div>
 
           {/* Resumo da fatura */}
@@ -229,6 +259,17 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
                     <TableCell>
                       {r.duplicate ? (
                         <Badge variant="warning">duplicata</Badge>
+                      ) : r.historyMatched ? (
+                        <Badge
+                          variant="secondary"
+                          title={`Reconhecida pelo histórico${
+                            r.suggestedResponsibleName
+                              ? ` → ${r.suggestedResponsibleName}`
+                              : ""
+                          }${r.suggestedCategoryName ? ` · ${r.suggestedCategoryName}` : ""}`}
+                        >
+                          reconhecida
+                        </Badge>
                       ) : (
                         <Badge variant="success">ok</Badge>
                       )}
@@ -246,12 +287,16 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
               start(async () => {
                 const r = await commitPdfImport(buildFormData());
                 if (r.ok) {
+                  const refTxt = r.reference
+                    ? ` ${refLabel(refToInput(r.reference))}`
+                    : "";
                   setResult(
-                    `✓ ${r.imported} compras lançadas na fatura · ${r.duplicates} duplicatas ignoradas · total ${r.total}`
+                    `✓ ${r.imported} compras lançadas na fatura${refTxt} · ${r.duplicates} duplicatas ignoradas · total ${r.total}`
                   );
                   setPreview(null);
                   setFile(null);
                   setCardId("");
+                  setReference("");
                 } else {
                   setResult(`Erro: ${r.error}`);
                 }
@@ -275,6 +320,7 @@ function CsvPanel({ cards, accounts }: { cards: any[]; accounts: any[] }) {
   const [file, setFile] = useState<File | null>(null);
   const [cardId, setCardId] = useState("");
   const [accountId, setAccountId] = useState("");
+  const [reference, setReference] = useState("");
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [pending, start] = useTransition();
   const [result, setResult] = useState<string | null>(null);
@@ -284,12 +330,13 @@ function CsvPanel({ cards, accounts }: { cards: any[]; accounts: any[] }) {
     if (file) fd.set("file", file);
     if (cardId) fd.set("cardId", cardId);
     if (accountId) fd.set("accountId", accountId);
+    if (cardId && reference) fd.set("reference", reference);
     return fd;
   }
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
           <Label>Arquivo (CSV/XLSX)</Label>
           <Input
@@ -319,6 +366,18 @@ function CsvPanel({ cards, accounts }: { cards: any[]; accounts: any[] }) {
               </option>
             ))}
           </Select>
+        </div>
+        <div>
+          <Label>Fatura de referência</Label>
+          <Input
+            type="month"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            disabled={!cardId}
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Só para cartão. Vazio = detectar.
+          </p>
         </div>
       </div>
 

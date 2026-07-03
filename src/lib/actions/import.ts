@@ -2,9 +2,15 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { parseFile, type ParseDiagnostics, type ParsedRow } from "@/lib/services/parseImport";
-import { applyRules } from "@/lib/services/rules";
-import { attachToInvoice } from "@/lib/services/invoices";
-import { transactionHash } from "@/lib/services/hash";
+import {
+  analyzeImportRows,
+  commitAnalyzedRows,
+  type ImportReference,
+  type ImportRowInput,
+} from "@/lib/services/import-engine";
+import { invoiceReferenceFor } from "@/lib/services/invoices";
+import { requireAdmin } from "@/lib/auth/viewer";
+import type { CreditCard } from "@prisma/client";
 
 export type PreviewRow = {
   date: Date | null;
@@ -17,6 +23,8 @@ export type PreviewRow = {
   hash: string;
   reason?: string;
   suggestedCategoryName?: string | null;
+  suggestedResponsibleName?: string | null;
+  historyMatched?: boolean;
 };
 
 export type PreviewResult =
@@ -31,13 +39,50 @@ export type PreviewResult =
       parsedSample: ParsedRow[];
       ignoredReasons: ParseDiagnostics["ignoredReasons"];
       rows: PreviewRow[];
+      // Fatura âncora sugerida (quando importando para um cartão)
+      suggestedReference: ImportReference | null;
     }
   | { ok: false; error: string };
 
+/** Lê "YYYY-MM" enviado pelo formulário. */
+function parseReferenceInput(value: string | null): ImportReference | null {
+  if (!value) return null;
+  const m = value.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (!year || month < 1 || month > 12) return null;
+  return { referenceMonth: month, referenceYear: year };
+}
+
+/** Fallback de referência: fatura correspondente à compra mais recente. */
+function inferReference(
+  rows: { date: Date | null }[],
+  card: CreditCard
+): ImportReference | null {
+  const dates = rows.map((r) => r.date).filter(Boolean) as Date[];
+  if (dates.length === 0) return null;
+  const latest = new Date(Math.max(...dates.map((d) => d.getTime())));
+  return invoiceReferenceFor(latest, card.closingDay);
+}
+
+function toEngineRows(rows: ParsedRow[]): ImportRowInput[] {
+  return rows.map((r) => ({
+    date: r.date as Date,
+    description: r.description,
+    amount: r.amount,
+    isCredit: r.isCredit,
+    installment: r.installment ?? null,
+    totalInstallments: r.totalInstallments ?? null,
+  }));
+}
+
 export async function previewImport(formData: FormData): Promise<PreviewResult> {
+  await requireAdmin();
   const file = formData.get("file") as File | null;
   const cardId = (formData.get("cardId") as string) || null;
   const accountId = (formData.get("accountId") as string) || null;
+  const referenceInput = parseReferenceInput((formData.get("reference") as string) || null);
   if (!file) return { ok: false, error: "Arquivo ausente." };
 
   let diag: ParseDiagnostics;
@@ -47,65 +92,71 @@ export async function previewImport(formData: FormData): Promise<PreviewResult> 
     return { ok: false, error: e?.message ?? "Falha ao ler arquivo." };
   }
 
-  const categories = await prisma.category.findMany({
-    select: { id: true, name: true },
+  const card = cardId
+    ? await prisma.creditCard.findUnique({ where: { id: cardId } })
+    : null;
+
+  const validRows = diag.rows.filter((r) => !r.reason && r.date);
+  const reference = card
+    ? referenceInput ?? inferReference(validRows, card)
+    : null;
+
+  const analysis = await analyzeImportRows({
+    rows: toEngineRows(validRows),
+    cardId: card?.id ?? null,
+    accountId,
+    holderId: card?.holderId ?? null,
+    reference,
   });
-  const catById = new Map(categories.map((c) => [c.id, c.name]));
 
-  const rows: PreviewRow[] = [];
-  let duplicates = 0;
-  for (const r of diag.rows) {
-    let duplicate = false;
-    let hash = "";
-    let suggestedCategoryName: string | null = null;
-
-    if (!r.reason && r.date) {
-      hash = transactionHash({
+  // Mescla resultados de volta na ordem original do arquivo
+  const analyzedQueue = [...analysis.rows];
+  const rows: PreviewRow[] = diag.rows.map((r) => {
+    if (r.reason || !r.date) {
+      return {
         date: r.date,
         description: r.description,
         amount: r.amount,
-        cardId,
-        accountId,
-      });
-      const existing = await prisma.transaction.findUnique({ where: { hash } });
-      duplicate = !!existing;
-      if (duplicate) duplicates++;
-
-      const effects = await applyRules({
-        description: r.description,
-        cardId,
-        amount: r.amount,
-      });
-      if (effects.categoryId) {
-        suggestedCategoryName = catById.get(effects.categoryId) ?? null;
-      }
+        isCredit: r.isCredit,
+        installment: r.installment,
+        totalInstallments: r.totalInstallments,
+        duplicate: false,
+        hash: "",
+        reason: r.reason,
+      };
     }
-
-    rows.push({
+    const a = analyzedQueue.shift()!;
+    return {
       date: r.date,
       description: r.description,
       amount: r.amount,
       isCredit: r.isCredit,
       installment: r.installment,
       totalInstallments: r.totalInstallments,
-      duplicate,
-      hash,
-      reason: r.reason,
-      suggestedCategoryName,
-    });
-  }
+      duplicate: a.duplicate,
+      hash: a.hash,
+      suggestedCategoryName: a.categoryId
+        ? analysis.categoryNameById.get(a.categoryId) ?? null
+        : null,
+      suggestedResponsibleName: a.responsibleId
+        ? analysis.personNameById.get(a.responsibleId) ?? null
+        : null,
+      historyMatched: a.historyMatched,
+    };
+  });
 
   return {
     ok: true,
     total: diag.totalLines,
     valid: diag.validLines,
     ignored: diag.ignoredLines,
-    duplicates,
+    duplicates: analysis.duplicates,
     detectedColumns: diag.detectedColumns,
     rawSample: diag.rawSample,
     parsedSample: diag.parsedSample,
     ignoredReasons: diag.ignoredReasons,
     rows,
+    suggestedReference: reference,
   };
 }
 
@@ -117,13 +168,16 @@ export type CommitResult =
       duplicates: number;
       ignored: number;
       batchId: string;
+      reference: ImportReference | null;
     }
   | { ok: false; error: string };
 
 export async function commitImport(formData: FormData): Promise<CommitResult> {
+  await requireAdmin();
   const file = formData.get("file") as File | null;
   const cardId = (formData.get("cardId") as string) || null;
   const accountId = (formData.get("accountId") as string) || null;
+  const referenceInput = parseReferenceInput((formData.get("reference") as string) || null);
   if (!file) return { ok: false, error: "Arquivo ausente." };
 
   let diag: ParseDiagnostics;
@@ -150,100 +204,34 @@ export async function commitImport(formData: FormData): Promise<CommitResult> {
     };
   }
 
-  const batch = await prisma.importBatch.create({
-    data: {
-      source: file.name.toLowerCase().endsWith(".xlsx") ? "xlsx" : "csv",
-      fileName: file.name,
-      cardId: cardId || null,
-      accountId: accountId || null,
-      total: diag.validLines,
-    },
+  const card = cardId
+    ? await prisma.creditCard.findUnique({ where: { id: cardId } })
+    : null;
+  if (cardId && !card) return { ok: false, error: "Cartão não encontrado." };
+
+  const validRows = diag.rows.filter((r) => !r.reason && r.date);
+  const reference = card
+    ? referenceInput ?? inferReference(validRows, card)
+    : null;
+
+  const analysis = await analyzeImportRows({
+    rows: toEngineRows(validRows),
+    cardId: card?.id ?? null,
+    accountId,
+    holderId: card?.holderId ?? null,
+    reference,
   });
 
-  let imported = 0;
-  let duplicates = 0;
-
-  for (const r of diag.rows) {
-    if (r.reason) continue;
-    if (!r.date) continue;
-
-    const hash = transactionHash({
-      date: r.date,
-      description: r.description,
-      amount: r.amount,
-      cardId,
-      accountId,
-    });
-    const existing = await prisma.transaction.findUnique({ where: { hash } });
-    if (existing) {
-      duplicates++;
-      continue;
-    }
-
-    const effects = await applyRules({
-      description: r.description,
-      cardId,
-      amount: r.amount,
-    });
-
-    // Cartão: compras = despesa; estornos (valor negativo) = ajuste/receita
-    const type = cardId
-      ? r.isCredit
-        ? "ajuste"
-        : "despesa"
-      : r.isCredit
-        ? "receita"
-        : "despesa";
-
-    const tx = await prisma.transaction.create({
-      data: {
-        date: r.date,
-        description: r.description,
-        amount: r.amount,
-        type,
-        origin: cardId ? "cartao" : "pix",
-        cardId: cardId || null,
-        accountId: accountId || null,
-        categoryId: effects.categoryId || null,
-        responsibleId: effects.responsibleId || null,
-        belongsTo: effects.belongsTo || "pessoal",
-        status: effects.status || "pendente",
-        reimbursable: effects.reimbursable || false,
-        importBatchId: batch.id,
-        hash,
-      },
-    });
-
-    if (r.installment && r.totalInstallments && r.totalInstallments > 1) {
-      const each = Number((r.amount / r.totalInstallments).toFixed(2));
-      const installments = [];
-      for (let i = 1; i <= r.totalInstallments; i++) {
-        const due = new Date(r.date);
-        due.setMonth(due.getMonth() + (i - 1));
-        installments.push({
-          transactionId: tx.id,
-          number: i,
-          total: r.totalInstallments,
-          amount: each,
-          dueDate: due,
-          paid: false,
-        });
-      }
-      await prisma.installment.createMany({ data: installments });
-    }
-
-    if (cardId) await attachToInvoice(tx.id);
-    imported++;
-  }
-
-  await prisma.importBatch.update({
-    where: { id: batch.id },
-    data: { imported, duplicates },
+  const outcome = await commitAnalyzedRows(analysis, {
+    source: file.name.toLowerCase().endsWith(".xlsx") ? "xlsx" : "csv",
+    fileName: file.name,
+    card,
+    accountId,
+    reference,
   });
 
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
-  revalidatePath("/importar");
   revalidatePath("/importar");
   if (cardId) {
     revalidatePath("/cartoes");
@@ -252,10 +240,11 @@ export async function commitImport(formData: FormData): Promise<CommitResult> {
 
   return {
     ok: true,
-    batchId: batch.id,
-    imported,
-    duplicates,
+    batchId: outcome.batchId,
+    imported: outcome.imported,
+    duplicates: outcome.duplicates,
     ignored: diag.ignoredLines,
     total: diag.totalLines,
+    reference: outcome.reference,
   };
 }

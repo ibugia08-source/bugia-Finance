@@ -180,25 +180,86 @@ export async function totalFaturas(status?: string[]) {
   return { total, paid, openAmount: total - paid };
 }
 
-export async function limiteDisponivel(cardId: string) {
-  const card = await prisma.creditCard.findUnique({ where: { id: cardId } });
-  if (!card) return 0;
-  const inv = await prisma.creditCardInvoice.aggregate({
-    where: { cardId, status: { in: ["aberta", "fechada", "parcial"] } },
+/**
+ * Limite usado por cartão em UMA query (groupBy) para vários cartões.
+ * Substitui limiteUsado/limiteDisponivel chamados em loop por cartão.
+ */
+export async function limitesUsadosPorCartao(
+  cardIds: string[]
+): Promise<Map<string, number>> {
+  if (cardIds.length === 0) return new Map();
+  const rows = await prisma.creditCardInvoice.groupBy({
+    by: ["cardId"],
+    where: { cardId: { in: cardIds }, status: { in: ["aberta", "fechada", "parcial"] } },
     _sum: { total: true, paid: true },
   });
-  const used = (inv._sum.total ?? 0) - (inv._sum.paid ?? 0);
-  return Math.max(0, card.limitTotal - used);
+  return new Map(
+    rows.map((r) => [
+      r.cardId,
+      Math.max(0, (r._sum.total ?? 0) - (r._sum.paid ?? 0)),
+    ])
+  );
 }
 
 export async function limiteUsado(cardId: string) {
-  const card = await prisma.creditCard.findUnique({ where: { id: cardId } });
+  const map = await limitesUsadosPorCartao([cardId]);
+  return map.get(cardId) ?? 0;
+}
+
+export async function limiteDisponivel(cardId: string) {
+  const [card, used] = await Promise.all([
+    prisma.creditCard.findUnique({ where: { id: cardId } }),
+    limiteUsado(cardId),
+  ]);
   if (!card) return 0;
-  const inv = await prisma.creditCardInvoice.aggregate({
-    where: { cardId, status: { in: ["aberta", "fechada", "parcial"] } },
-    _sum: { total: true, paid: true },
+  return Math.max(0, card.limitTotal - used);
+}
+
+/**
+ * PROJEÇÃO de parcelas futuras por cartão, calculada a partir dos METADADOS
+ * das transações importadas (installmentNumber/installmentTotal) — nenhuma
+ * parcela futura existe no banco. Para cada grupo de parcelamento considera a
+ * parcela mais recente vista: restante = (total − nº atual) × valor da parcela.
+ */
+export async function parcelasFuturasEstimadasPorCartao(
+  cardIds: string[]
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>(cardIds.map((id) => [id, 0]));
+  if (cardIds.length === 0) return result;
+
+  const txs = await prisma.transaction.findMany({
+    where: {
+      cardId: { in: cardIds },
+      installmentTotal: { gt: 1 },
+      status: { not: "cancelado" },
+    },
+    select: {
+      cardId: true,
+      amount: true,
+      installmentNumber: true,
+      installmentTotal: true,
+      installmentGroupKey: true,
+      date: true,
+    },
   });
-  return Math.max(0, (inv._sum.total ?? 0) - (inv._sum.paid ?? 0));
+
+  // Última parcela vista por grupo (sem grupo → trata a própria linha como grupo)
+  const latestByGroup = new Map<string, (typeof txs)[number]>();
+  for (const t of txs) {
+    const key = t.installmentGroupKey ?? `solo:${t.cardId}:${t.date.getTime()}:${t.amount}`;
+    const prev = latestByGroup.get(key);
+    if (!prev || (t.installmentNumber ?? 0) > (prev.installmentNumber ?? 0)) {
+      latestByGroup.set(key, t);
+    }
+  }
+
+  for (const t of latestByGroup.values()) {
+    if (!t.cardId || !t.installmentTotal) continue;
+    const current = t.installmentNumber ?? 1;
+    const remaining = Math.max(0, t.installmentTotal - current) * t.amount;
+    result.set(t.cardId, (result.get(t.cardId) ?? 0) + remaining);
+  }
+  return result;
 }
 
 export async function parcelasFuturas() {
@@ -243,4 +304,116 @@ export async function quemMeDeve() {
     name: people.find((p) => p.id === r.personId)?.name ?? "?",
     total: r._sum.amount ?? 0,
   }));
+}
+
+export type DashboardSummary = {
+  receitas: number;
+  despesas: number;
+  faturas: { total: number; paid: number; openAmount: number };
+  aReceber: number;
+  porPertenceA: { pessoal: number; empresa: number; terceiro: number; familiar: number };
+  caixa: number;
+  taxaEndividamento: number;
+  sobraReal: number;
+  receitasPrevistas: number;
+  despesasPrevistas: number;
+};
+
+/**
+ * Todas as métricas do dashboard em UMA passada: ~11 queries em paralelo e
+ * derivações em memória (antes: ~25 aggregates, vários repetidos em série).
+ */
+export async function getDashboardSummary(
+  reference: Date = new Date()
+): Promise<DashboardSummary> {
+  const { start, end } = monthRange(reference);
+
+  const [
+    txReceitaAgg,
+    incomeReceivedAgg,
+    despesasAgg,
+    faturasAgg,
+    aReceberAgg,
+    belongsToRows,
+    caixaAgg,
+    despesasPrevAgg,
+    despesasPagasAgg,
+    faturasPagasAgg,
+    receitasPrevAgg,
+  ] = await Promise.all([
+    prisma.transaction.aggregate({
+      where: { type: "receita", date: { gte: start, lt: end }, status: { not: "cancelado" } },
+      _sum: { amount: true },
+    }),
+    prisma.income.aggregate({
+      where: { receivedAt: { gte: start, lt: end }, status: "RECEIVED" },
+      _sum: { amount: true },
+    }),
+    prisma.transaction.aggregate({
+      where: { type: "despesa", date: { gte: start, lt: end }, status: { not: "cancelado" } },
+      _sum: { amount: true },
+    }),
+    prisma.creditCardInvoice.aggregate({
+      where: { status: { in: ["aberta", "fechada", "parcial", "atrasada"] } },
+      _sum: { total: true, paid: true },
+    }),
+    prisma.receivable.aggregate({
+      where: { status: { in: ["aberto", "atrasado", "renegociado"] } },
+      _sum: { amount: true },
+    }),
+    prisma.transaction.groupBy({
+      by: ["belongsTo"],
+      where: { type: "despesa", date: { gte: start, lt: end }, status: { not: "cancelado" } },
+      _sum: { amount: true },
+    }),
+    prisma.cashBox.aggregate({ _sum: { currentAmount: true } }),
+    prisma.transaction.aggregate({
+      where: {
+        type: "despesa",
+        date: { gte: start, lt: end },
+        status: { in: ["pendente", "devendo"] },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.transaction.aggregate({
+      where: { type: "despesa", date: { gte: start, lt: end }, status: "pago" },
+      _sum: { amount: true },
+    }),
+    prisma.creditCardInvoice.aggregate({
+      where: { status: "paga", dueDate: { gte: start, lt: end } },
+      _sum: { paid: true },
+    }),
+    prisma.income.aggregate({
+      where: { receivedAt: { gte: start, lt: end }, status: { in: ["EXPECTED", "LATE"] } },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const receitas = (txReceitaAgg._sum.amount ?? 0) + (incomeReceivedAgg._sum.amount ?? 0);
+  const faturaTotal = faturasAgg._sum.total ?? 0;
+  const faturaPaid = faturasAgg._sum.paid ?? 0;
+  const faturas = { total: faturaTotal, paid: faturaPaid, openAmount: faturaTotal - faturaPaid };
+  const despesasPrevistas = despesasPrevAgg._sum.amount ?? 0;
+
+  const byBelongs = new Map(belongsToRows.map((r) => [r.belongsTo, r._sum.amount ?? 0]));
+  const obrig = faturas.openAmount + despesasPrevistas;
+
+  return {
+    receitas,
+    despesas: despesasAgg._sum.amount ?? 0,
+    faturas,
+    aReceber: aReceberAgg._sum.amount ?? 0,
+    porPertenceA: {
+      pessoal: byBelongs.get("pessoal") ?? 0,
+      empresa: byBelongs.get("empresa") ?? 0,
+      terceiro: byBelongs.get("terceiro") ?? 0,
+      familiar: byBelongs.get("familiar") ?? 0,
+    },
+    caixa: caixaAgg._sum.currentAmount ?? 0,
+    taxaEndividamento: receitas <= 0 ? (obrig > 0 ? 1 : 0) : obrig / receitas,
+    sobraReal:
+      receitas - (despesasPagasAgg._sum.amount ?? 0) - (faturasPagasAgg._sum.paid ?? 0),
+    receitasPrevistas: receitasPrevAgg._sum.amount ?? 0,
+    despesasPrevistas,
+  };
 }

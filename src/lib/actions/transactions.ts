@@ -204,51 +204,66 @@ export async function setTransactionResponsible(
     await prisma.receivable.delete({ where: { id: existingReceivable.id } });
   }
 
-  // Propaga para parcelas "irmãs" futuras (mesmo cartão + descrição normalizada + valor)
+  // Propaga para parcelas "irmãs" futuras da mesma compra — tudo em LOTE.
+  // Prioriza o grupo de parcelamento (installmentGroupKey); sem ele, cai no
+  // match legado por descrição normalizada + valor.
   if (tx.cardId) {
-    const norm = normalizeDescription(tx.description);
+    const baseWhere = tx.installmentGroupKey
+      ? { installmentGroupKey: tx.installmentGroupKey }
+      : { cardId: tx.cardId, amount: tx.amount };
     const candidates = await prisma.transaction.findMany({
       where: {
-        cardId: tx.cardId,
-        amount: tx.amount,
+        ...baseWhere,
         date: { gt: tx.date },
         id: { not: tx.id },
         OR: [{ responsibleId: null }, { responsibleId: holderId }],
       },
+      select: { id: true, description: true, amount: true, date: true, status: true },
     });
-    for (const c of candidates) {
-      if (normalizeDescription(c.description) !== norm) continue;
-      await prisma.transaction.update({
-        where: { id: c.id },
-        data: {
-          responsibleId: personId,
-          reimbursable: isThirdParty,
-          status: isThirdParty ? "devendo" : c.status === "devendo" ? "pendente" : c.status,
-        },
-      });
-      const sibReceivable = await prisma.receivable.findFirst({
-        where: { transactionId: c.id },
-      });
-      if (isThirdParty && personId) {
-        if (sibReceivable) {
-          await prisma.receivable.update({
-            where: { id: sibReceivable.id },
-            data: { personId, amount: c.amount },
-          });
-        } else {
-          await prisma.receivable.create({
-            data: {
-              personId,
-              transactionId: c.id,
-              amount: c.amount,
-              dueDate: c.date,
-              status: "aberto",
-            },
-          });
-        }
-      } else if (sibReceivable) {
-        await prisma.receivable.delete({ where: { id: sibReceivable.id } });
-      }
+
+    const norm = normalizeDescription(tx.description);
+    const siblings = tx.installmentGroupKey
+      ? candidates
+      : candidates.filter((c) => normalizeDescription(c.description) === norm);
+
+    if (siblings.length > 0) {
+      const ids = siblings.map((c) => c.id);
+      const devendoIds = siblings
+        .filter((c) => c.status === "devendo")
+        .map((c) => c.id);
+
+      const ops: any[] = [
+        prisma.transaction.updateMany({
+          where: { id: { in: ids } },
+          data: { responsibleId: personId, reimbursable: isThirdParty },
+        }),
+        isThirdParty
+          ? prisma.transaction.updateMany({
+              where: { id: { in: ids } },
+              data: { status: "devendo" },
+            })
+          : devendoIds.length > 0
+            ? prisma.transaction.updateMany({
+                where: { id: { in: devendoIds } },
+                data: { status: "pendente" },
+              })
+            : null,
+        // Recebíveis: recria em lote conforme o novo responsável
+        prisma.receivable.deleteMany({ where: { transactionId: { in: ids } } }),
+        isThirdParty && personId
+          ? prisma.receivable.createMany({
+              data: siblings.map((c) => ({
+                personId,
+                transactionId: c.id,
+                amount: c.amount,
+                dueDate: c.date,
+                status: "aberto",
+              })),
+            })
+          : null,
+      ].filter(Boolean);
+
+      await prisma.$transaction(ops);
     }
   }
 

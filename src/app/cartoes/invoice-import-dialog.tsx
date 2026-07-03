@@ -36,6 +36,17 @@ import type { PdfDiagnostics } from "@/lib/pdf/parse-invoice-pdf";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { FileUp } from "lucide-react";
 
+/** {referenceMonth, referenceYear} → "YYYY-MM" (input type="month") */
+function refToInput(ref: { referenceMonth: number; referenceYear: number } | null | undefined) {
+  if (!ref) return "";
+  return `${ref.referenceYear}-${String(ref.referenceMonth).padStart(2, "0")}`;
+}
+
+function refLabel(value: string) {
+  const m = value.match(/^(\d{4})-(\d{2})$/);
+  return m ? `${m[2]}/${m[1]}` : value;
+}
+
 export function InvoiceImportDialog({
   cardId,
   cardName,
@@ -47,12 +58,14 @@ export function InvoiceImportDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [reference, setReference] = useState("");
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [pending, start] = useTransition();
   const [result, setResult] = useState<string | null>(null);
 
   function reset() {
     setFile(null);
+    setReference("");
     setPreview(null);
     setResult(null);
   }
@@ -61,6 +74,7 @@ export function InvoiceImportDialog({
     const fd = new FormData();
     if (file) fd.set("file", file);
     fd.set("cardId", cardId);
+    if (reference) fd.set("reference", reference);
     return fd;
   }
 
@@ -96,17 +110,30 @@ export function InvoiceImportDialog({
               comuns (data, descrição/title, valor) em português ou inglês. Transações
               serão vinculadas automaticamente a este cartão.
             </p>
-            <div>
-              <Label>Arquivo CSV/XLSX do extrato</Label>
-              <Input
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                onChange={(e) => {
-                  setFile(e.target.files?.[0] ?? null);
-                  setPreview(null);
-                  setResult(null);
-                }}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>Arquivo CSV/XLSX do extrato</Label>
+                <Input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={(e) => {
+                    setFile(e.target.files?.[0] ?? null);
+                    setPreview(null);
+                    setResult(null);
+                  }}
+                />
+              </div>
+              <div>
+                <Label>Fatura de referência (mês)</Label>
+                <Input
+                  type="month"
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Todas as linhas entram nessa fatura. Vazio = detectar pelo arquivo.
+                </p>
+              </div>
             </div>
 
             <div className="flex gap-2">
@@ -118,6 +145,9 @@ export function InvoiceImportDialog({
                   start(async () => {
                     const r = await previewImport(buildFormData());
                     setPreview(r);
+                    if (r.ok && !reference && r.suggestedReference) {
+                      setReference(refToInput(r.suggestedReference));
+                    }
                     setResult(null);
                   })
                 }
@@ -147,8 +177,11 @@ export function InvoiceImportDialog({
                     }
                     const r = await commitImport(buildFormData());
                     if (r.ok) {
+                      const refTxt = r.reference
+                        ? ` na fatura ${refLabel(refToInput(r.reference))}`
+                        : "";
                       setResult(
-                        `✓ ${r.imported} importadas · ${r.duplicates} duplicatas · ${r.ignored} ignoradas · total ${r.total}`
+                        `✓ ${r.imported} importadas${refTxt} · ${r.duplicates} duplicatas · ${r.ignored} ignoradas · total ${r.total}`
                       );
                       setPreview(null);
                     } else {
@@ -199,6 +232,7 @@ function PdfImportPanel({
   cardName: string;
 }) {
   const [file, setFile] = useState<File | null>(null);
+  const [reference, setReference] = useState("");
   const [preview, setPreview] = useState<PdfPreviewResult | null>(null);
   const [pending, start] = useTransition();
   const [result, setResult] = useState<string | null>(null);
@@ -207,6 +241,7 @@ function PdfImportPanel({
     const fd = new FormData();
     if (file) fd.set("file", file);
     fd.set("cardId", cardId);
+    if (reference) fd.set("reference", reference);
     return fd;
   }
 
@@ -218,17 +253,30 @@ function PdfImportPanel({
         exporte em CSV/XLSX nesses casos.
       </p>
 
-      <div>
-        <Label>Arquivo PDF do extrato</Label>
-        <Input
-          type="file"
-          accept="application/pdf,.pdf"
-          onChange={(e) => {
-            setFile(e.target.files?.[0] ?? null);
-            setPreview(null);
-            setResult(null);
-          }}
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <Label>Arquivo PDF do extrato</Label>
+          <Input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(e) => {
+              setFile(e.target.files?.[0] ?? null);
+              setPreview(null);
+              setResult(null);
+            }}
+          />
+        </div>
+        <div>
+          <Label>Fatura de referência (mês)</Label>
+          <Input
+            type="month"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Detectada pelo vencimento do PDF; ajuste se necessário.
+          </p>
+        </div>
       </div>
 
       <div className="flex gap-2">
@@ -240,6 +288,9 @@ function PdfImportPanel({
             start(async () => {
               const r = await previewPdfImport(buildFormData());
               setPreview(r);
+              if (r.ok && !reference && r.suggestedReference) {
+                setReference(refToInput(r.suggestedReference));
+              }
               setResult(null);
             })
           }
@@ -258,14 +309,20 @@ function PdfImportPanel({
                   setResult(p.ok ? "Nada para importar." : `Erro: ${p.error}`);
                   return;
                 }
+                if (p.ok && !reference && p.suggestedReference) {
+                  setReference(refToInput(p.suggestedReference));
+                }
               } else if (!preview.ok || preview.rows.length === 0) {
                 setResult("Pré-visualize um arquivo válido antes de confirmar.");
                 return;
               }
               const r = await commitPdfImport(buildFormData());
               if (r.ok) {
+                const refTxt = r.reference
+                  ? ` na fatura ${refLabel(refToInput(r.reference))}`
+                  : "";
                 setResult(
-                  `✓ ${r.imported} importadas · ${r.duplicates} duplicatas · total ${r.total}`
+                  `✓ ${r.imported} importadas${refTxt} · ${r.duplicates} duplicatas · total ${r.total}`
                 );
                 setPreview(null);
                 setFile(null);
@@ -357,11 +414,20 @@ function PdfImportPanel({
                         : "—"}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {r.suggestedCategoryName ?? "—"}
+                      {[r.suggestedCategoryName, r.suggestedResponsibleName]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
                     </TableCell>
                     <TableCell>
                       {r.duplicate ? (
                         <Badge variant="warning">duplicata</Badge>
+                      ) : r.historyMatched ? (
+                        <Badge
+                          variant="secondary"
+                          title="Parcela reconhecida pelo histórico — herda pessoa/categoria da parcela anterior"
+                        >
+                          reconhecida
+                        </Badge>
                       ) : (
                         <Badge variant="success">ok</Badge>
                       )}
@@ -459,7 +525,9 @@ function CsvDiagnostics({ preview }: { preview: Extract<PreviewResult, { ok: tru
                     : "—"}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {r.suggestedCategoryName ?? "—"}
+                  {[r.suggestedCategoryName, r.suggestedResponsibleName]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
                 </TableCell>
                 <TableCell>
                   {r.reason ? (
@@ -468,6 +536,13 @@ function CsvDiagnostics({ preview }: { preview: Extract<PreviewResult, { ok: tru
                     </Badge>
                   ) : r.duplicate ? (
                     <Badge variant="warning">duplicata</Badge>
+                  ) : r.historyMatched ? (
+                    <Badge
+                      variant="secondary"
+                      title="Parcela reconhecida pelo histórico — herda pessoa/categoria da parcela anterior"
+                    >
+                      reconhecida
+                    </Badge>
                   ) : (
                     <Badge variant="success">ok</Badge>
                   )}

@@ -1,17 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
-import {
-  totalDespesasMes,
-  totalReceitasMes,
-  totalFaturas,
-  totalAReceber,
-  gastosPorPertenceA,
-  totalEmCaixa,
-  taxaEndividamento,
-  sobraReal,
-  receitasPrevistasMes,
-  despesasPrevistasMes,
-} from "@/lib/services/calculations";
+import { getDashboardSummary } from "@/lib/services/calculations";
 import { formatBRL, monthLabel } from "@/lib/format";
 import { Card, CardContent } from "@/lib/ui";
 import { Badge } from "@/components/ui/badge";
@@ -59,37 +48,22 @@ export default async function DashboardPage({
   }
 
   const ref = parseMonthRef(searchParams?.mes);
-  const [
+  const [summary, history] = await Promise.all([
+    getDashboardSummary(ref),
+    getMonthlyHistory(),
+  ]);
+  const {
     receitas,
     despesas,
     faturas,
     aReceber,
-    pessoal,
-    empresa,
-    terceiros,
-    familia,
+    porPertenceA: { pessoal, empresa, terceiro: terceiros, familiar: familia },
     caixa,
-    taxa,
-    sobra,
-    receitasPrev,
-    despesasPrev,
-  ] = await Promise.all([
-    totalReceitasMes(ref),
-    totalDespesasMes(ref),
-    totalFaturas(["aberta", "fechada", "parcial", "atrasada"]),
-    totalAReceber(),
-    gastosPorPertenceA("pessoal", ref),
-    gastosPorPertenceA("empresa", ref),
-    gastosPorPertenceA("terceiro", ref),
-    gastosPorPertenceA("familiar", ref),
-    totalEmCaixa(),
-    taxaEndividamento(ref),
-    sobraReal(ref),
-    receitasPrevistasMes(ref),
-    despesasPrevistasMes(ref),
-  ]);
-
-  const history = await getMonthlyHistory();
+    taxaEndividamento: taxa,
+    sobraReal: sobra,
+    receitasPrevistas: receitasPrev,
+    despesasPrevistas: despesasPrev,
+  } = summary;
 
   const endivStatus = endividamentoStatus(taxa);
 

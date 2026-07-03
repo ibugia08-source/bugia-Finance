@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE, verifySessionToken } from "./session";
@@ -12,8 +13,11 @@ export type CurrentUser = {
 /**
  * Lê a sessão do cookie e devolve o usuário ativo correspondente.
  * Retorna null quando não há sessão válida ou o usuário foi desativado.
+ *
+ * Memoizado por request (React.cache): layout + página + actions dentro da
+ * mesma renderização compartilham 1 única consulta ao banco.
  */
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const token = cookies().get(SESSION_COOKIE)?.value;
   const payload = verifySessionToken(token);
   if (!payload) return null;
@@ -27,4 +31,4 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     email: user.email,
     role: (user.role as "ADMIN" | "USER") ?? "USER",
   };
-}
+});

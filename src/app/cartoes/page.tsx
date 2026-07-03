@@ -10,7 +10,10 @@ import { CardRowActions } from "./row-actions";
 import { InvoiceImportDialog } from "./invoice-import-dialog";
 import { QuickRenameCard } from "./quick-rename";
 import { Badge } from "@/components/ui/badge";
-import { limiteUsado, limiteDisponivel } from "@/lib/services/calculations";
+import {
+  limitesUsadosPorCartao,
+  parcelasFuturasEstimadasPorCartao,
+} from "@/lib/services/calculations";
 import { ArrowRight } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/viewer";
 
@@ -19,23 +22,27 @@ export default async function CartoesPage() {
   const [cards, people, accounts] = await Promise.all([
     prisma.creditCard.findMany({
       orderBy: { name: "asc" },
-      include: { holder: true, invoices: true, transactions: { where: { status: { not: "cancelado" } } } },
+      include: { holder: true },
     }),
     prisma.person.findMany({ orderBy: { name: "asc" } }),
     prisma.account.findMany({ orderBy: { name: "asc" } }),
   ]);
 
-  const enriched = await Promise.all(
-    cards.map(async (c) => ({
+  const cardIds = cards.map((c) => c.id);
+  const [usedByCard, futureByCard] = await Promise.all([
+    limitesUsadosPorCartao(cardIds),
+    parcelasFuturasEstimadasPorCartao(cardIds),
+  ]);
+
+  const enriched = cards.map((c) => {
+    const used = usedByCard.get(c.id) ?? 0;
+    return {
       card: c,
-      used: await limiteUsado(c.id),
-      available: await limiteDisponivel(c.id),
-      futureInstallments: await prisma.installment.aggregate({
-        where: { transaction: { cardId: c.id }, paid: false, dueDate: { gte: new Date() } },
-        _sum: { amount: true },
-      }),
-    }))
-  );
+      used,
+      available: Math.max(0, c.limitTotal - used),
+      futureInstallments: futureByCard.get(c.id) ?? 0,
+    };
+  });
 
   return (
     <div>
@@ -73,8 +80,8 @@ export default async function CartoesPage() {
                     <p className="font-medium text-emerald-600">{formatBRL(available)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Parcelas futuras</p>
-                    <p className="font-medium">{formatBRL(futureInstallments._sum.amount ?? 0)}</p>
+                    <p className="text-muted-foreground">Parcelas futuras (estimativa)</p>
+                    <p className="font-medium">{formatBRL(futureInstallments)}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-2 items-center justify-between">

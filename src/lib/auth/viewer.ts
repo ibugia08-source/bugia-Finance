@@ -1,8 +1,18 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, type CurrentUser } from "./current-user";
 
 export type Viewer = CurrentUser & { personId: string | null };
+
+/** Person vinculada memoizada por request (1 consulta por render). */
+const getPersonIdForUser = cache(async (userId: string): Promise<string | null> => {
+  const person = await prisma.person.findFirst({
+    where: { userId },
+    select: { id: true },
+  });
+  return person?.id ?? null;
+});
 
 /**
  * Retorna o usuário logado + Person vinculada (quando houver).
@@ -12,12 +22,8 @@ export async function getViewer(from?: string): Promise<Viewer> {
   const user = await getCurrentUser();
   if (!user) redirect(`/login${from ? `?from=${encodeURIComponent(from)}` : ""}`);
 
-  const person = await prisma.person.findFirst({
-    where: { userId: user.id },
-    select: { id: true },
-  });
-
-  return { ...user, personId: person?.id ?? null };
+  const personId = await getPersonIdForUser(user.id);
+  return { ...user, personId };
 }
 
 /**

@@ -16,8 +16,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { limiteUsado, limiteDisponivel } from "@/lib/services/calculations";
-import { invoiceReferenceFor } from "@/lib/services/invoices";
+import {
+  limitesUsadosPorCartao,
+  parcelasFuturasEstimadasPorCartao,
+} from "@/lib/services/calculations";
 import { InvoiceImportDialog } from "../invoice-import-dialog";
 import { ResponsibleSelect } from "./responsible-select";
 import { CardDetailFilters } from "./month-filter";
@@ -83,59 +85,55 @@ export default async function CardDetailPage({
     prisma.category.findMany({ orderBy: { name: "asc" } }),
   ]);
 
-  // Mês selecionado (default = mês atual)
-  let ref = new Date();
+  // Mês de FATURA selecionado (default = mês atual). A listagem é ancorada na
+  // fatura real daquele mês; sem fatura, cai para as compras do mês-calendário.
+  let refYear = new Date().getFullYear();
+  let refMonth = new Date().getMonth() + 1;
   if (searchParams.mes) {
     const [y, m] = searchParams.mes.split("-").map(Number);
-    if (y && m) ref = new Date(y, m - 1, 1);
+    if (y && m >= 1 && m <= 12) {
+      refYear = y;
+      refMonth = m;
+    }
   }
-  const { start, end } = monthRange(ref);
+  const { start, end } = monthRange(new Date(refYear, refMonth - 1, 1));
 
-  const refInvoice = invoiceReferenceFor(start, card.closingDay);
-
-  const txWhere: any = {
-    cardId: card.id,
-    date: { gte: start, lt: end },
-  };
-  if (searchParams.pessoa) txWhere.responsibleId = searchParams.pessoa;
-  if (searchParams.categoria) txWhere.categoryId = searchParams.categoria;
-  if (searchParams.status) txWhere.status = searchParams.status;
-
-  const [
-    used,
-    available,
-    invoices,
-    transactions,
-    nextDueInvoice,
-    futureInstAgg,
-  ] = await Promise.all([
-    limiteUsado(card.id),
-    limiteDisponivel(card.id),
+  const [usedMap, futureMap, invoices, nextDueInvoice] = await Promise.all([
+    limitesUsadosPorCartao([card.id]),
+    parcelasFuturasEstimadasPorCartao([card.id]),
     prisma.creditCardInvoice.findMany({
       where: { cardId: card.id },
       orderBy: [{ referenceYear: "desc" }, { referenceMonth: "desc" }],
       take: 12,
     }),
-    prisma.transaction.findMany({
-      where: txWhere,
-      orderBy: { date: "desc" },
-      include: { category: true, responsible: true },
-    }),
     prisma.creditCardInvoice.findFirst({
       where: { cardId: card.id, status: { in: ["aberta", "fechada", "parcial", "atrasada"] } },
       orderBy: { dueDate: "asc" },
     }),
-    prisma.installment.aggregate({
-      where: { transaction: { cardId: card.id }, paid: false, dueDate: { gte: new Date() } },
-      _sum: { amount: true },
-    }),
   ]);
 
+  const used = usedMap.get(card.id) ?? 0;
+  const available = Math.max(0, card.limitTotal - used);
+  const futureEstimate = futureMap.get(card.id) ?? 0;
+
   const currentInvoice = invoices.find(
-    (i) =>
-      i.referenceMonth === refInvoice.referenceMonth &&
-      i.referenceYear === refInvoice.referenceYear
+    (i) => i.referenceMonth === refMonth && i.referenceYear === refYear
   );
+
+  // Fatura âncora: transações DA fatura selecionada; sem fatura → mês-calendário.
+  const txWhere: any = currentInvoice
+    ? { invoiceId: currentInvoice.id }
+    : { cardId: card.id, date: { gte: start, lt: end } };
+  if (searchParams.pessoa) txWhere.responsibleId = searchParams.pessoa;
+  if (searchParams.categoria) txWhere.categoryId = searchParams.categoria;
+  if (searchParams.status) txWhere.status = searchParams.status;
+
+  const transactions = await prisma.transaction.findMany({
+    where: txWhere,
+    orderBy: { date: "desc" },
+    include: { category: true, responsible: true, accountCard: true },
+    take: 500,
+  });
 
   // Resumo por pessoa baseado nas transações filtradas (mês selecionado)
   type Summary = {
@@ -188,8 +186,8 @@ export default async function CardDetailPage({
         <StatCard title="Limite usado" value={formatBRL(used)} intent="negative" />
         <StatCard title="Limite disponível" value={formatBRL(available)} intent="positive" />
         <StatCard
-          title="Parcelas futuras"
-          value={formatBRL(futureInstAgg._sum.amount ?? 0)}
+          title="Parcelas futuras (estimativa)"
+          value={formatBRL(futureEstimate)}
         />
         <Card>
           <CardContent className="p-5">
@@ -331,7 +329,17 @@ export default async function CardDetailPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Transações do mês</CardTitle>
+          <CardTitle>
+            {currentInvoice
+              ? `Transações da fatura ${String(refMonth).padStart(2, "0")}/${refYear}`
+              : "Transações do mês (sem fatura importada)"}
+          </CardTitle>
+          {currentInvoice?.declaredTotal != null && (
+            <p className="text-xs text-muted-foreground">
+              Total declarado no PDF: {formatBRL(currentInvoice.declaredTotal)} · Total
+              importado: {formatBRL(currentInvoice.total)}
+            </p>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -339,6 +347,8 @@ export default async function CardDetailPage({
               <TableRow>
                 <TableHead>Data</TableHead>
                 <TableHead>Descrição</TableHead>
+                <TableHead>Parcela</TableHead>
+                <TableHead>Cartão</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead>Responsável</TableHead>
                 <TableHead>Status</TableHead>
@@ -348,15 +358,40 @@ export default async function CardDetailPage({
             <TableBody>
               {transactions.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    Nenhuma transação no mês selecionado.
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    Nenhuma transação no período selecionado.
                   </TableCell>
                 </TableRow>
               )}
               {transactions.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell>{formatDateBR(t.date)}</TableCell>
-                  <TableCell className="max-w-xs truncate">{t.description}</TableCell>
+                  <TableCell className="max-w-xs truncate">
+                    {t.description}
+                    {t.historyMatched && (
+                      <Badge
+                        variant="secondary"
+                        className="ml-2 align-middle"
+                        title="Categoria/pessoa herdadas de parcela anterior reconhecida pelo histórico"
+                      >
+                        reconhecida
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {t.installmentNumber && t.installmentTotal ? (
+                      <Badge variant="outline">
+                        {t.installmentNumber}/{t.installmentTotal}
+                      </Badge>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {t.accountCard
+                      ? `${t.accountCard.name}${t.accountCard.lastDigits ? ` ·${t.accountCard.lastDigits}` : ""}`
+                      : "—"}
+                  </TableCell>
                   <TableCell>{t.category?.name ?? "—"}</TableCell>
                   <TableCell className="min-w-[180px]">
                     <ResponsibleSelect txId={t.id} value={t.responsibleId} people={people} />
@@ -367,7 +402,8 @@ export default async function CardDetailPage({
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    -{formatBRL(t.amount)}
+                    {t.type === "despesa" ? "-" : "+"}
+                    {formatBRL(t.amount)}
                   </TableCell>
                 </TableRow>
               ))}

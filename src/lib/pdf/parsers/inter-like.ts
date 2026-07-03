@@ -1,4 +1,5 @@
 import type { PdfParseResult, PdfTransaction } from "../types";
+import { matchCardSection } from "./shared";
 
 /**
  * Parser "inter-like" — fatura do Banco Inter (e layouts semelhantes onde a
@@ -58,10 +59,15 @@ export function tryInterLike(text: string): PdfParseResult | null {
 
   const transactions: PdfTransaction[] = [];
   const ignored: string[] = [];
+  let currentCardDigits: string | null = null;
 
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(DATE_RE);
-    if (!m) continue;
+    if (!m) {
+      const digits = matchCardSection(lines[i]);
+      if (digits) currentCardDigits = digits;
+      continue;
+    }
 
     const [, dd, mmm, yyyy, restRaw] = m;
     const monthKey = normMonth(mmm);
@@ -128,7 +134,14 @@ export function tryInterLike(text: string): PdfParseResult | null {
     }
 
     if (!description) description = "Transação";
-    transactions.push({ date, description, amount, installment, totalInstallments });
+    transactions.push({
+      date,
+      description,
+      amount,
+      installment,
+      totalInstallments,
+      cardLastDigits: currentCardDigits,
+    });
     i += consumedAhead;
   }
 

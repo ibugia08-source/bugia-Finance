@@ -14,7 +14,8 @@ export default async function ImportarPage() {
     prisma.importBatch.findMany({ orderBy: { createdAt: "desc" }, take: 10 }),
     prisma.creditCardInvoice.findMany({
       orderBy: [{ referenceYear: "desc" }, { referenceMonth: "desc" }],
-      include: { card: true },
+      include: { card: { select: { id: true, name: true, bank: true } } },
+      take: 36,
     }),
   ]);
 

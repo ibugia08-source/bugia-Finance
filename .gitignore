@@ -12,3 +12,8 @@ dev.db.bak-*
 
 # cache incremental do TypeScript
 tsconfig.tsbuildinfo
+.vercel
+.env*
+
+# backups dos scripts de correção de dados
+backups/

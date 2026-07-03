@@ -1,4 +1,5 @@
 import type { PdfParseResult, PdfTransaction } from "../types";
+import { matchCardSection, adjustYearToAnchor } from "./shared";
 
 /**
  * Parser "itau-like" — faturas com data DD/MM ou DD/MM/AA, descrição e valor.
@@ -55,13 +56,20 @@ export function tryItauLike(text: string): PdfParseResult | null {
     .map((l) => l.trim())
     .filter(Boolean);
 
-  const fallbackYear = detectYear(text);
+  const { closing, due } = detectClosingAndDue(text);
+  const anchor = closing ?? due;
+  const fallbackYear = anchor?.getFullYear() ?? detectYear(text);
   const transactions: PdfTransaction[] = [];
   const ignored: string[] = [];
+  let currentCardDigits: string | null = null;
 
   for (const line of lines) {
     const m = line.match(LINE_RE);
-    if (!m) continue;
+    if (!m) {
+      const digits = matchCardSection(line);
+      if (digits) currentCardDigits = digits;
+      continue;
+    }
     const [, dd, mm, yyOpt, descRaw, amountStr] = m;
     const day = Number(dd);
     const month = Number(mm) - 1;
@@ -69,7 +77,8 @@ export function tryItauLike(text: string): PdfParseResult | null {
     if (yyOpt) {
       year = Number(yyOpt.length === 2 ? "20" + yyOpt : yyOpt);
     }
-    const date = new Date(year, month, day);
+    let date = new Date(year, month, day);
+    if (!yyOpt) date = adjustYearToAnchor(date, anchor);
     const amount = Math.abs(parseAmount(amountStr));
     if (!amount) continue;
 
@@ -91,12 +100,18 @@ export function tryItauLike(text: string): PdfParseResult | null {
       }
     }
 
-    transactions.push({ date, description, amount, installment, totalInstallments });
+    transactions.push({
+      date,
+      description,
+      amount,
+      installment,
+      totalInstallments,
+      cardLastDigits: currentCardDigits,
+    });
   }
 
   if (transactions.length === 0) return null;
 
-  const { closing, due } = detectClosingAndDue(text);
   return {
     layout: "itau-like",
     transactions,

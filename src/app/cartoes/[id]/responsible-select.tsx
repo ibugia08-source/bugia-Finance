@@ -1,5 +1,5 @@
 "use client";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Select } from "@/components/ui/select";
 import { setTransactionResponsible } from "@/lib/actions/transactions";
 
@@ -12,14 +12,18 @@ export function ResponsibleSelect({
   value: string | null;
   people: { id: string; name: string }[];
 }) {
-  const [pending, start] = useTransition();
+  // Otimista: o select muda na hora; a gravação + refresh acontecem em
+  // background (sem travar a página inteira a cada atribuição).
+  const [local, setLocal] = useState(value ?? "");
+  const [, start] = useTransition();
+
   return (
     <Select
-      defaultValue={value ?? ""}
-      disabled={pending}
+      value={local}
       onChange={(e) => {
-        const next = e.target.value || null;
-        start(() => setTransactionResponsible(txId, next));
+        const next = e.target.value;
+        setLocal(next);
+        start(() => setTransactionResponsible(txId, next || null));
       }}
       className="h-8 text-sm"
     >
