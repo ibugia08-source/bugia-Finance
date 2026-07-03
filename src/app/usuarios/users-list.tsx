@@ -8,6 +8,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { UserRowActions } from "./row-actions";
 import { Search, ShieldCheck, UserCheck } from "lucide-react";
+import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardActions,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
 
 export type UserRow = {
   id: string;
@@ -72,7 +80,7 @@ export function UsersList({ users, people }: { users: UserRow[]; people: any[] }
           </div>
         </div>
 
-        <div className="border rounded-lg overflow-hidden">
+        <div className="hidden md:block border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -127,6 +135,51 @@ export function UsersList({ users, people }: { users: UserRow[]; people: any[] }
             </TableBody>
           </Table>
         </div>
+
+        {/* Mobile: cada usuário vira um card */}
+        <MobileCards className="p-0">
+          {filtered.length === 0 ? (
+            <MobileEmpty>
+              {users.length === 0
+                ? "Nenhum usuário cadastrado ainda."
+                : "Nenhum usuário encontrado com esse filtro."}
+            </MobileEmpty>
+          ) : (
+            filtered.map((u) => (
+              <MobileCard key={u.id}>
+                <MobileCardHeader
+                  title={u.name}
+                  aside={
+                    <Badge variant={u.active ? "success" : "outline"}>
+                      {u.active ? "Ativo" : "Inativo"}
+                    </Badge>
+                  }
+                />
+                <div className="space-y-1.5">
+                  <Field label="E-mail">{u.email}</Field>
+                  <Field label="Papel">
+                    <Badge variant={u.role === "ADMIN" ? "default" : "secondary"}>
+                      {u.role === "ADMIN" ? "Administrador" : "Usuário"}
+                    </Badge>
+                  </Field>
+                  <Field label="Pessoa vinculada">
+                    {u.personName ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+                        <UserCheck className="h-3.5 w-3.5" />
+                        {u.personName}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </Field>
+                </div>
+                <MobileCardActions>
+                  <UserRowActions user={u} people={people} />
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          )}
+        </MobileCards>
       </CardContent>
     </Card>
   );

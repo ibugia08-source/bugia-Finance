@@ -45,7 +45,7 @@ export function RuleDialog({
             await saveRule(fd);
             setOpen(false);
           }}
-          className="grid grid-cols-2 gap-3"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
           {initial?.id && <input type="hidden" name="id" value={initial.id} />}
           <div className="col-span-2">
@@ -56,7 +56,7 @@ export function RuleDialog({
             <Label>Prioridade</Label>
             <Input name="priority" type="number" defaultValue={initial?.priority ?? 100} />
           </div>
-          <div className="flex items-center gap-2 pt-6">
+          <div className="flex items-center gap-2 sm:pt-6">
             <input type="checkbox" name="active" defaultChecked={initial?.active ?? true} />
             <Label>Ativa</Label>
           </div>

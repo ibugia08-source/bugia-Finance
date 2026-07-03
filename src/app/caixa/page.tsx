@@ -104,20 +104,22 @@ export default async function CaixaPage() {
                   ) : (
                     <ul className="space-y-1 text-sm">
                       {box.movements.map((m) => (
-                        <li key={m.id} className="flex items-center justify-between">
-                          <span className="flex items-center gap-2">
+                        <li key={m.id} className="flex items-center justify-between gap-2">
+                          <span className="flex min-w-0 flex-1 items-center gap-2">
                             <Badge
                               variant={m.type === "IN" ? "success" : "destructive"}
-                              className="text-[10px]"
+                              className="shrink-0 text-[10px]"
                             >
                               {m.type === "IN" ? "Entrada" : "Saída"}
                             </Badge>
-                            <span className="text-muted-foreground">
+                            <span className="shrink-0 text-muted-foreground">
                               {formatDateBR(m.date)}
                             </span>
-                            {m.description && <span>— {m.description}</span>}
+                            {m.description && (
+                              <span className="truncate">— {m.description}</span>
+                            )}
                           </span>
-                          <span className="flex items-center gap-1">
+                          <span className="flex shrink-0 items-center gap-1">
                             <span
                               className={
                                 m.type === "IN" ? "text-emerald-600" : "text-red-600"

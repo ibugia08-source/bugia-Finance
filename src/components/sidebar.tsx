@@ -1,58 +1,15 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Receipt,
-  Upload,
-  Landmark,
-  Users,
-  Settings2,
-  Wand2,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  PiggyBank,
-  ShieldCheck,
-  Sparkles,
-  MessageCircle,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BugiaSymbol } from "./mascot";
 import { UserMenu } from "./user-menu";
 import { ThemeToggle } from "./theme-toggle";
+import { visibleNavItems, type UserLike } from "./nav-items";
 
-type Item = {
-  href: string;
-  label: string;
-  icon: any;
-  adminOnly?: boolean;
-};
-
-const items: Item[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/assistente", label: "Assistente IA", icon: Sparkles, adminOnly: true },
-  { href: "/whatsapp", label: "Agente IA", icon: MessageCircle, adminOnly: true },
-  { href: "/receitas", label: "Receitas", icon: ArrowDownToLine },
-  { href: "/despesas", label: "Despesas", icon: ArrowUpFromLine },
-  { href: "/caixa", label: "Caixa", icon: PiggyBank },
-  { href: "/transacoes", label: "Movimentações", icon: Receipt },
-  { href: "/importar", label: "Importar fatura", icon: Upload },
-  { href: "/cartoes", label: "Contas bancárias", icon: Landmark },
-  { href: "/pessoas", label: "Pessoas", icon: Users },
-  { href: "/regras", label: "Regras", icon: Wand2 },
-  { href: "/usuarios", label: "Usuários", icon: ShieldCheck, adminOnly: true },
-  { href: "/configuracoes", label: "Configurações", icon: Settings2, adminOnly: true },
-];
-
-export function Sidebar({
-  user,
-}: {
-  user: { name: string; email: string; role: "ADMIN" | "USER" } | null;
-}) {
+export function Sidebar({ user }: { user: UserLike }) {
   const path = usePathname();
-  const visibleItems = items.filter(
-    (it) => !it.adminOnly || user?.role === "ADMIN"
-  );
+  const visibleItems = visibleNavItems(user);
   return (
     <aside className="hidden md:flex md:w-72 shrink-0 flex-col md:sticky md:top-0 md:h-screen md:self-start border-r bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="px-6 py-5 border-b">

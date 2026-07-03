@@ -50,7 +50,7 @@ export function MovementDialog({
         >
           <input type="hidden" name="cashBoxId" value={cashBoxId} />
           <input type="hidden" name="type" value={type} />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Valor</Label>
               <Input name="amount" defaultValue="0,00" required />

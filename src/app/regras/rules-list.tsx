@@ -8,6 +8,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { RuleRowActions } from "./row-actions";
 import { Search, Wand2 } from "lucide-react";
+import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardActions,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
 
 export function RulesList({
   rules,
@@ -61,7 +69,7 @@ export function RulesList({
           </div>
         </div>
 
-        <div className="border rounded-lg overflow-hidden">
+        <div className="hidden md:block border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -134,6 +142,69 @@ export function RulesList({
             </TableBody>
           </Table>
         </div>
+
+        {/* Mobile: cada regra vira um card */}
+        <MobileCards className="p-0">
+          {filtered.length === 0 ? (
+            <MobileEmpty>
+              {rules.length === 0
+                ? "Nenhuma regra cadastrada ainda."
+                : "Nenhuma regra encontrada com esse filtro."}
+            </MobileEmpty>
+          ) : (
+            filtered.map((r) => (
+              <MobileCard key={r.id}>
+                <MobileCardHeader
+                  title={r.name}
+                  aside={
+                    <Badge variant={r.active ? "success" : "secondary"}>
+                      {r.active ? "Ativa" : "Inativa"}
+                    </Badge>
+                  }
+                />
+                <div className="space-y-1.5">
+                  <Field label="Prioridade">
+                    <Badge variant="outline">{r.priority}</Badge>
+                  </Field>
+                  <Field label="Condição">
+                    <span className="flex flex-wrap justify-end gap-1">
+                      {r.descriptionContains && (
+                        <Badge variant="secondary" className="font-normal">
+                          contém “{r.descriptionContains}”
+                        </Badge>
+                      )}
+                      {r.amountGreaterThan != null && (
+                        <Badge variant="secondary" className="font-normal">valor &gt; {r.amountGreaterThan}</Badge>
+                      )}
+                      {r.amountLessThan != null && (
+                        <Badge variant="secondary" className="font-normal">valor &lt; {r.amountLessThan}</Badge>
+                      )}
+                      {!r.descriptionContains && r.amountGreaterThan == null && r.amountLessThan == null && (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </span>
+                  </Field>
+                  <Field label="Ação">
+                    <span className="flex flex-wrap justify-end gap-1">
+                      {r.category?.name && (
+                        <Badge variant="default" className="font-normal">cat: {r.category.name}</Badge>
+                      )}
+                      {r.belongsTo && (
+                        <Badge variant="outline" className="font-normal capitalize">{r.belongsTo}</Badge>
+                      )}
+                      {!r.category?.name && !r.belongsTo && (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </span>
+                  </Field>
+                </div>
+                <MobileCardActions>
+                  <RuleRowActions rule={r} categories={categories} cards={cards} />
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          )}
+        </MobileCards>
       </CardContent>
     </Card>
   );

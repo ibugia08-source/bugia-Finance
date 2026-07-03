@@ -8,6 +8,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { CategoryRowActions } from "./row-actions";
 import { Search, Tags } from "lucide-react";
+import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardActions,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
 
 export type CategoryRow = {
   id: string;
@@ -66,7 +74,7 @@ export function CategoriesList({ categories }: { categories: CategoryRow[] }) {
           </div>
         </div>
 
-        <div className="border rounded-lg overflow-hidden">
+        <div className="hidden md:block border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -110,6 +118,40 @@ export function CategoriesList({ categories }: { categories: CategoryRow[] }) {
             </TableBody>
           </Table>
         </div>
+
+        {/* Mobile: cada categoria vira um card */}
+        <MobileCards className="p-0">
+          {filtered.length === 0 ? (
+            <MobileEmpty>
+              {categories.length === 0
+                ? "Nenhuma categoria cadastrada ainda."
+                : "Nenhuma categoria encontrada com esse filtro."}
+            </MobileEmpty>
+          ) : (
+            filtered.map((c) => (
+              <MobileCard key={c.id}>
+                <MobileCardHeader
+                  title={
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="inline-block w-3.5 h-3.5 rounded-full ring-1 ring-black/10"
+                        style={{ background: c.color ?? "#999" }}
+                      />
+                      {c.name}
+                    </span>
+                  }
+                  aside={<Badge variant="secondary">{KIND_LABEL[c.kind] ?? c.kind}</Badge>}
+                />
+                <div className="space-y-1.5">
+                  <Field label="Transações">{c.usage}</Field>
+                </div>
+                <MobileCardActions>
+                  <CategoryRowActions category={c} />
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          )}
+        </MobileCards>
       </CardContent>
     </Card>
   );

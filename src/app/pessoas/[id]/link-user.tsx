@@ -16,7 +16,7 @@ export function LinkUserPicker({
 }) {
   const [pending, start] = useTransition();
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Select
         defaultValue={currentUserId ?? ""}
         disabled={pending}
@@ -25,7 +25,7 @@ export function LinkUserPicker({
             linkPersonToUser(personId, e.target.value || null)
           )
         }
-        className="h-9 text-sm w-[260px]"
+        className="h-9 text-sm w-full sm:w-[260px]"
       >
         <option value="">— sem usuário vinculado</option>
         {users.map((u) => (

@@ -11,6 +11,14 @@ import { Button } from "@/components/ui/button";
 import { PersonRowActions } from "./row-actions";
 import { formatBRL } from "@/lib/format";
 import { ArrowRight, UserCheck, Search, Users } from "lucide-react";
+import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardActions,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
 
 export type PersonRow = {
   id: string;
@@ -76,8 +84,8 @@ export function PeopleList({ people }: { people: PersonRow[] }) {
           </div>
         </div>
 
-        {/* Tabela */}
-        <div className="border rounded-lg overflow-hidden">
+        {/* Tabela (desktop) */}
+        <div className="hidden md:block border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -145,6 +153,63 @@ export function PeopleList({ people }: { people: PersonRow[] }) {
             </TableBody>
           </Table>
         </div>
+
+        {/* Mobile: cada pessoa vira um card */}
+        <MobileCards className="p-0">
+          {filtered.length === 0 ? (
+            <MobileEmpty>
+              {people.length === 0
+                ? "Nenhuma pessoa cadastrada ainda."
+                : "Nenhuma pessoa encontrada com esse filtro."}
+            </MobileEmpty>
+          ) : (
+            filtered.map((p) => (
+              <MobileCard key={p.id}>
+                <MobileCardHeader
+                  title={
+                    <Link href={`/pessoas/${p.id}`} className="hover:underline">
+                      {p.name}
+                    </Link>
+                  }
+                  aside={<span className="font-semibold">{formatBRL(p.totalGasto)}</span>}
+                />
+                <div className="space-y-1.5">
+                  <Field label="Tipo">
+                    <Badge variant="secondary">{TYPE_LABEL[p.type] ?? p.type}</Badge>
+                  </Field>
+                  <Field label="Usuário vinculado">
+                    {p.userEmail ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+                        <UserCheck className="h-3.5 w-3.5" />
+                        {p.userEmail}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </Field>
+                  <Field label="Devendo">
+                    {p.aReceber > 0 ? (
+                      <Badge variant="warning">{formatBRL(p.aReceber)}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">{formatBRL(0)}</span>
+                    )}
+                  </Field>
+                  <Field label="Já pago">
+                    <span className="text-emerald-600">{formatBRL(p.pago)}</span>
+                  </Field>
+                </div>
+                <MobileCardActions>
+                  <Link href={`/pessoas/${p.id}`}>
+                    <Button size="sm" variant="outline">
+                      Ver detalhes <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                    </Button>
+                  </Link>
+                  <PersonRowActions person={p} />
+                </MobileCardActions>
+              </MobileCard>
+            ))
+          )}
+        </MobileCards>
       </CardContent>
     </Card>
   );

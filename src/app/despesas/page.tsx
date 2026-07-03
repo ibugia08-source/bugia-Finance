@@ -12,6 +12,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardActions,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
 import { ExpenseDialog } from "./expense-dialog";
 import { ExpenseActions } from "./row-actions";
 import { ExpenseFilters } from "./filters";
@@ -115,6 +123,8 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
 
       <Card>
         <CardContent className="p-0">
+          {/* Desktop: tabela completa */}
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -169,6 +179,55 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
               })}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile: cada despesa vira um card */}
+          <MobileCards>
+            {expenses.length === 0 ? (
+              <MobileEmpty>
+                Nenhuma despesa neste período. Adicione sua primeira despesa.
+              </MobileEmpty>
+            ) : (
+              expenses.map((e) => {
+                const st = statusInfo(e.status, e.dueDate);
+                const parc = e.installments.length;
+                return (
+                  <MobileCard key={e.id}>
+                    <MobileCardHeader
+                      title={e.description}
+                      aside={
+                        <span className="font-semibold text-red-600 dark:text-red-400">
+                          -{formatBRL(e.amount)}
+                        </span>
+                      }
+                    />
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span>{formatDateBR(e.date)}</span>
+                      <span aria-hidden>·</span>
+                      <span>{e.category?.name ?? "—"}</span>
+                      <Badge variant={st.variant}>{st.label}</Badge>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Field label="Forma">{ORIGIN_LABEL[e.origin] ?? e.origin}</Field>
+                      <Field label="Pessoa">{e.responsible?.name ?? "—"}</Field>
+                      <Field label="Parcelas">{parc > 1 ? `${parc}x` : "à vista"}</Field>
+                      <Field label="Vencimento">
+                        {e.dueDate ? formatDateBR(e.dueDate) : "—"}
+                      </Field>
+                    </div>
+                    <MobileCardActions>
+                      <ExpenseActions
+                        expense={{ ...e, installmentsCount: parc }}
+                        people={people}
+                        categories={categories}
+                        accounts={accounts}
+                      />
+                    </MobileCardActions>
+                  </MobileCard>
+                );
+              })
+            )}
+          </MobileCards>
         </CardContent>
       </Card>
     </div>

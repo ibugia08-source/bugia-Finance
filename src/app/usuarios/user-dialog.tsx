@@ -48,7 +48,7 @@ export function UserDialog({
           className="space-y-3"
         >
           {editing && <input type="hidden" name="id" value={initial.id} />}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="col-span-2">
               <Label>Nome</Label>
               <Input name="name" defaultValue={initial?.name ?? ""} required />

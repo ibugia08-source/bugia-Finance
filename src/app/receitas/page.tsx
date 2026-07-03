@@ -12,6 +12,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardActions,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
 import { IncomeDialog } from "./income-dialog";
 import { IncomeActions } from "./row-actions";
 import { IncomeFilters } from "./filters";
@@ -132,6 +140,8 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
 
       <Card>
         <CardContent className="p-0">
+          {/* Desktop: tabela completa */}
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -187,6 +197,55 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
               ))}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile: cada receita vira um card */}
+          <MobileCards>
+            {incomes.length === 0 ? (
+              <MobileEmpty>
+                <img
+                  src="/brand/empty-receitas.svg"
+                  alt=""
+                  className="mx-auto mb-3 w-44 max-w-full opacity-95"
+                />
+                Nenhuma receita registrada neste período. Adicione uma entrada para começar.
+              </MobileEmpty>
+            ) : (
+              incomes.map((i) => (
+                <MobileCard key={i.id}>
+                  <MobileCardHeader
+                    title={i.description}
+                    aside={
+                      <span className="font-semibold text-emerald-600">
+                        +{formatBRL(i.amount)}
+                      </span>
+                    }
+                  />
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span>{formatDateBR(i.receivedAt)}</span>
+                    <span aria-hidden>·</span>
+                    <span>{TYPE_LABEL[i.incomeType] ?? i.incomeType}</span>
+                    <Badge variant={statusVariant(i.status)}>
+                      {STATUS_LABEL[i.status] ?? i.status}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Field label="Origem">{SOURCE_LABEL[i.sourceType] ?? i.sourceType}</Field>
+                    <Field label="Conta">{i.account?.name ?? "—"}</Field>
+                    <Field label="Pessoa">{i.person?.name ?? "—"}</Field>
+                  </div>
+                  <MobileCardActions>
+                    <IncomeActions
+                      income={i}
+                      accounts={accounts}
+                      people={people}
+                      categories={categories}
+                    />
+                  </MobileCardActions>
+                </MobileCard>
+              ))
+            )}
+          </MobileCards>
         </CardContent>
       </Card>
     </div>

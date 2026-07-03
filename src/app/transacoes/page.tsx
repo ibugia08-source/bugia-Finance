@@ -4,6 +4,13 @@ import { formatBRL, formatDateBR, monthRange } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
 import { Filters } from "./filters";
 import { getViewer } from "@/lib/auth/viewer";
 
@@ -78,6 +85,8 @@ export default async function TransacoesPage({ searchParams }: { searchParams: S
 
       <Card>
         <CardContent className="p-0">
+          {/* Desktop: tabela completa */}
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -118,6 +127,47 @@ export default async function TransacoesPage({ searchParams }: { searchParams: S
               ))}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile: cada movimentação vira um card */}
+          <MobileCards>
+            {transactions.length === 0 ? (
+              <MobileEmpty>Nenhuma transação encontrada.</MobileEmpty>
+            ) : (
+              transactions.map((t) => (
+                <MobileCard key={t.id}>
+                  <MobileCardHeader
+                    title={t.description}
+                    aside={
+                      <span
+                        className={`font-semibold ${
+                          t.type === "receita" ? "text-emerald-600" : ""
+                        }`}
+                      >
+                        {t.type === "despesa" ? "-" : "+"}
+                        {formatBRL(t.amount)}
+                      </span>
+                    }
+                  />
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span>{formatDateBR(t.date)}</span>
+                    <span aria-hidden>·</span>
+                    <span>{t.category?.name ?? "—"}</span>
+                    <Badge variant={statusVariant(t.status)}>{t.status}</Badge>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Field label="Cartão / Conta">
+                      {t.card?.name ?? t.account?.name ?? "—"}
+                    </Field>
+                    <Field label="Pessoa">{t.responsible?.name ?? "—"}</Field>
+                    <Field label="Pertence a">
+                      <span className="capitalize">{t.belongsTo}</span>
+                    </Field>
+                  </div>
+                </MobileCard>
+              ))
+            )}
+          </MobileCards>
         </CardContent>
       </Card>
     </div>

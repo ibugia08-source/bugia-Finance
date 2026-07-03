@@ -45,7 +45,7 @@ export function CardDialog({
             await saveCard(fd);
             setOpen(false);
           }}
-          className="grid grid-cols-2 gap-3"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
           {initial?.id && <input type="hidden" name="id" value={initial.id} />}
           <div className="col-span-2">

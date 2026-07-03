@@ -3,6 +3,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { PayInvoiceDialog } from "../faturas/pay-dialog";
 import { DeleteInvoiceButton } from "./delete-actions";
+import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardActions,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -19,6 +27,9 @@ function statusVariant(s: string): any {
 
 export function InvoicesHistory({ invoices }: { invoices: any[] }) {
   return (
+    <>
+    {/* Desktop: tabela completa */}
+    <div className="hidden md:block">
     <Table>
       <TableHeader>
         <TableRow>
@@ -75,5 +86,52 @@ export function InvoicesHistory({ invoices }: { invoices: any[] }) {
         ))}
       </TableBody>
     </Table>
+    </div>
+
+    {/* Mobile: cada fatura vira um card */}
+    <MobileCards>
+      {invoices.length === 0 ? (
+        <MobileEmpty>
+          <img
+            src="/brand/empty-faturas.svg"
+            alt=""
+            className="mx-auto mb-3 w-56 max-w-full opacity-95"
+          />
+          Nenhuma fatura ainda. Importe a fatura de um cartão para gerá-las.
+        </MobileEmpty>
+      ) : (
+        invoices.map((inv) => (
+          <MobileCard key={inv.id}>
+            <MobileCardHeader
+              title={inv.card.name}
+              aside={
+                <Badge variant={statusVariant(inv.status)} className="capitalize">
+                  {inv.status}
+                </Badge>
+              }
+            />
+            <div className="space-y-1.5">
+              <Field label="Mês">
+                {MESES[inv.referenceMonth - 1]} / {inv.referenceYear}
+              </Field>
+              <Field label="Vencimento">{formatDateBR(inv.dueDate)}</Field>
+              <Field label="Total">{formatBRL(inv.total)}</Field>
+              <Field label="Pago">{formatBRL(inv.paid)}</Field>
+              <Field label="Em aberto">
+                <span className="font-medium">{formatBRL(inv.total - inv.paid)}</span>
+              </Field>
+            </div>
+            <MobileCardActions>
+              <PayInvoiceDialog invoice={inv} />
+              <DeleteInvoiceButton
+                invoiceId={inv.id}
+                label={`${MESES[inv.referenceMonth - 1]}/${inv.referenceYear} — ${inv.card.name}`}
+              />
+            </MobileCardActions>
+          </MobileCard>
+        ))
+      )}
+    </MobileCards>
+    </>
   );
 }

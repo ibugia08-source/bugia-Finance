@@ -8,6 +8,14 @@ import { formatBRL } from "@/lib/format";
 import { AccountCardDialog } from "./account-card-dialog";
 import { deleteAccountCard } from "@/lib/actions/account-cards";
 import { Pencil, Trash2 } from "lucide-react";
+import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardActions,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
 
 export function AccountCardsSection({
   cardId,
@@ -25,6 +33,8 @@ export function AccountCardsSection({
         <AccountCardDialog cardId={cardId} />
       </CardHeader>
       <CardContent className="p-0">
+        {/* Desktop: tabela completa */}
+        <div className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -69,6 +79,44 @@ export function AccountCardsSection({
             )}
           </TableBody>
         </Table>
+        </div>
+
+        {/* Mobile: cada cartão vira um card */}
+        <MobileCards>
+          {accountCards.length === 0 ? (
+            <MobileEmpty>
+              Nenhum cartão nesta conta. Adicione os cartões físicos e virtuais.
+            </MobileEmpty>
+          ) : (
+            <>
+              {accountCards.map((c) => (
+                <MobileCard key={c.id}>
+                  <MobileCardHeader
+                    title={c.name}
+                    aside={<span className="font-semibold">{formatBRL(c.limit ?? 0)}</span>}
+                  />
+                  <div className="space-y-1.5">
+                    <Field label="Tipo">
+                      <Badge variant={c.kind === "virtual" ? "secondary" : "outline"}>
+                        {c.kind === "virtual" ? "Virtual" : "Físico"}
+                      </Badge>
+                    </Field>
+                    <Field label="Final">{c.lastDigits ? `•••• ${c.lastDigits}` : "—"}</Field>
+                  </div>
+                  <MobileCardActions>
+                    <RowActions cardId={cardId} accountCard={c} />
+                  </MobileCardActions>
+                </MobileCard>
+              ))}
+              <div className="flex items-center justify-between rounded-xl border bg-card/40 px-3.5 py-3 text-sm">
+                <span className="font-medium text-muted-foreground">
+                  Soma dos limites dos cartões
+                </span>
+                <span className="font-semibold">{formatBRL(sumLimits)}</span>
+              </div>
+            </>
+          )}
+        </MobileCards>
       </CardContent>
     </Card>
   );

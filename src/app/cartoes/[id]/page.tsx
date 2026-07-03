@@ -17,6 +17,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  MobileCards,
+  MobileCard,
+  MobileCardHeader,
+  MobileCardActions,
+  Field,
+  MobileEmpty,
+} from "@/components/ui/record-card";
+import {
   limitesUsadosPorCartao,
   parcelasFuturasEstimadasPorCartao,
 } from "@/lib/services/calculations";
@@ -239,6 +247,8 @@ export default async function CardDetailPage({
           <CardTitle>Faturas por mês</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
+          {/* Desktop: tabela */}
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -287,6 +297,44 @@ export default async function CardDetailPage({
               ))}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile: cada fatura vira um card */}
+          <MobileCards>
+            {invoices.length === 0 ? (
+              <MobileEmpty>
+                Sem faturas geradas ainda. Importe transações para criar faturas.
+              </MobileEmpty>
+            ) : (
+              invoices.map((inv) => (
+                <MobileCard key={inv.id}>
+                  <MobileCardHeader
+                    title={`${String(inv.referenceMonth).padStart(2, "0")}/${inv.referenceYear}`}
+                    aside={
+                      <Badge variant={invoiceStatusVariant(inv.status)} className="capitalize">
+                        {inv.status}
+                      </Badge>
+                    }
+                  />
+                  <div className="space-y-1.5">
+                    <Field label="Fechamento">{formatDateBR(inv.closingDate)}</Field>
+                    <Field label="Vencimento">{formatDateBR(inv.dueDate)}</Field>
+                    <Field label="Total">{formatBRL(inv.total)}</Field>
+                    <Field label="Pago">{formatBRL(inv.paid)}</Field>
+                    <Field label="Em aberto">
+                      <span className="font-medium">{formatBRL(inv.total - inv.paid)}</span>
+                    </Field>
+                  </div>
+                  <MobileCardActions>
+                    <DeleteInvoiceButton
+                      invoiceId={inv.id}
+                      label={`${String(inv.referenceMonth).padStart(2, "0")}/${inv.referenceYear} — ${card.name}`}
+                    />
+                  </MobileCardActions>
+                </MobileCard>
+              ))
+            )}
+          </MobileCards>
         </CardContent>
       </Card>
 
@@ -301,6 +349,8 @@ export default async function CardDetailPage({
           <CardTitle>Resumo por pessoa (mês selecionado)</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
+          {/* Desktop: tabela */}
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -332,6 +382,33 @@ export default async function CardDetailPage({
               ))}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile: resumo por pessoa em cards */}
+          <MobileCards>
+            {personSummary.length === 0 ? (
+              <MobileEmpty>Sem transações no período selecionado.</MobileEmpty>
+            ) : (
+              personSummary.map((s) => (
+                <MobileCard key={s.personId ?? "none"}>
+                  <MobileCardHeader
+                    title={s.name}
+                    aside={<span className="font-semibold">{formatBRL(s.total)}</span>}
+                  />
+                  <div className="space-y-1.5">
+                    <Field label="Pago">
+                      <span className="text-emerald-600">{formatBRL(s.pago)}</span>
+                    </Field>
+                    <Field label="Pendente">{formatBRL(s.pendente)}</Field>
+                    <Field label="Devendo">
+                      <span className="text-red-600">{formatBRL(s.devendo)}</span>
+                    </Field>
+                    <Field label="Reembolsável">{formatBRL(s.reembolsavel)}</Field>
+                  </div>
+                </MobileCard>
+              ))
+            )}
+          </MobileCards>
         </CardContent>
       </Card>
 
@@ -350,6 +427,8 @@ export default async function CardDetailPage({
           )}
         </CardHeader>
         <CardContent className="p-0">
+          {/* Desktop: tabela */}
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -417,6 +496,67 @@ export default async function CardDetailPage({
               ))}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile: transações da fatura em cards (com seleção de responsável) */}
+          <MobileCards>
+            {transactions.length === 0 ? (
+              <MobileEmpty>Nenhuma transação no período selecionado.</MobileEmpty>
+            ) : (
+              transactions.map((t) => (
+                <MobileCard key={t.id}>
+                  <MobileCardHeader
+                    title={
+                      <span>
+                        {t.description}
+                        {t.historyMatched && (
+                          <Badge
+                            variant="secondary"
+                            className="ml-2 align-middle"
+                            title="Categoria/pessoa herdadas de parcela anterior reconhecida pelo histórico"
+                          >
+                            reconhecida
+                          </Badge>
+                        )}
+                      </span>
+                    }
+                    aside={
+                      <span className="font-semibold">
+                        {t.type === "despesa" ? "-" : "+"}
+                        {formatBRL(t.amount)}
+                      </span>
+                    }
+                  />
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span>{formatDateBR(t.date)}</span>
+                    <span aria-hidden>·</span>
+                    <span>{t.category?.name ?? "—"}</span>
+                    <Badge variant={statusVariant(t.status)} className="capitalize">
+                      {t.status}
+                    </Badge>
+                    {t.installmentNumber && t.installmentTotal ? (
+                      <Badge variant="outline">
+                        {t.installmentNumber}/{t.installmentTotal}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Field label="Cartão">
+                      {t.accountCard
+                        ? `${t.accountCard.name}${t.accountCard.lastDigits ? ` ·${t.accountCard.lastDigits}` : ""}`
+                        : "—"}
+                    </Field>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Responsável
+                    </p>
+                    <ResponsibleSelect txId={t.id} value={t.responsibleId} people={people} />
+                  </div>
+                </MobileCard>
+              ))
+            )}
+          </MobileCards>
         </CardContent>
       </Card>
     </div>

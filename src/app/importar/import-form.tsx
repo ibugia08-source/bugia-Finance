@@ -46,7 +46,7 @@ function refLabel(value: string) {
 export function ImportForm({ cards, accounts }: { cards: any[]; accounts: any[] }) {
   return (
     <Tabs defaultValue="pdf">
-      <TabsList>
+      <TabsList className="max-w-full overflow-x-auto">
         <TabsTrigger value="pdf">
           <Sparkles className="h-4 w-4 mr-1" /> Fatura PDF (automático)
         </TabsTrigger>
@@ -503,7 +503,7 @@ function NewBankAccountDialog({
               setOpen(false);
             })
           }
-          className="grid grid-cols-2 gap-3"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
           <div className="col-span-2">
             <Label>Nome</Label>
@@ -517,7 +517,7 @@ function NewBankAccountDialog({
             <Label>Limite total</Label>
             <Input name="limitTotal" defaultValue="0,00" />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <Label>Fechamento</Label>
               <Input name="closingDay" type="number" min={1} max={31} defaultValue={1} />

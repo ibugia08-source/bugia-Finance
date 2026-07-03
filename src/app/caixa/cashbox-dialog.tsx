@@ -51,7 +51,7 @@ export function CashBoxDialog({
             <Label>Nome</Label>
             <Input name="name" defaultValue={initial?.name ?? ""} required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>Valor atual</Label>
               <Input
