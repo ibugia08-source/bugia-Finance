@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { getViewer } from "@/lib/auth/viewer";
 import { getAISettingsView } from "@/lib/actions/ai";
 import { AISettingsDialog } from "./settings-dialog";
 import { Chat } from "./chat";
@@ -11,7 +11,10 @@ import { MemoryPanel } from "./memory-panel";
 import { Sparkles, Bot } from "lucide-react";
 
 export default async function AssistentePage() {
-  await requireAdmin();
+  // Aberto a qualquer usuário logado. Cada um vê o próprio histórico e memórias
+  // (AIConversation/AIMemory são escopados por dono). Só o admin configura a chave.
+  const viewer = await getViewer("/assistente");
+  const isAdmin = viewer.role === "ADMIN";
 
   const [settings, conversation, memories] = await Promise.all([
     getAISettingsView(),
@@ -45,7 +48,7 @@ export default async function AssistentePage() {
             <Badge variant={configured ? "success" : "secondary"}>
               {configured ? `Ativa · ${settings.model}` : "Não configurada"}
             </Badge>
-            <AISettingsDialog settings={settings} />
+            {isAdmin && <AISettingsDialog settings={settings} />}
           </div>
         }
       />
@@ -57,14 +60,16 @@ export default async function AssistentePage() {
               <Sparkles className="h-5 w-5 text-amber-600" />
             </div>
             <div className="flex-1">
-              <p className="font-semibold">Conecte sua IA para começar</p>
+              <p className="font-semibold">
+                {isAdmin ? "Conecte sua IA para começar" : "Assistente ainda não disponível"}
+              </p>
               <p className="text-sm text-muted-foreground">
-                Informe o provedor (OpenAI, Anthropic ou compatível), o modelo e sua chave de API.
-                A IA passa a analisar suas transações, faturas, gastos, pessoas e metas. O consumo de
-                tokens é cobrado pelo provedor que você configurar.
+                {isAdmin
+                  ? "Informe o provedor (OpenAI, Anthropic ou compatível), o modelo e sua chave de API. A IA passa a analisar suas transações, faturas, gastos, pessoas e metas. O consumo de tokens é cobrado pelo provedor que você configurar."
+                  : "O administrador ainda não configurou a inteligência artificial. Assim que ele conectar uma chave, o assistente fica disponível para analisar os seus dados."}
               </p>
             </div>
-            <AISettingsDialog settings={settings} />
+            {isAdmin && <AISettingsDialog settings={settings} />}
           </CardContent>
         </Card>
       )}

@@ -29,7 +29,7 @@ export type NavItem = {
 // Fonte única de navegação — usada pela sidebar (desktop), pela barra inferior e pela gaveta "Mais" (mobile).
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", short: "Início", icon: LayoutDashboard, primary: true },
-  { href: "/assistente", label: "Assistente IA", icon: Sparkles, adminOnly: true },
+  { href: "/assistente", label: "Assistente IA", icon: Sparkles },
   { href: "/whatsapp", label: "Agente IA", icon: MessageCircle, adminOnly: true },
   { href: "/receitas", label: "Receitas", icon: ArrowDownToLine, primary: true },
   { href: "/despesas", label: "Despesas", icon: ArrowUpFromLine },
