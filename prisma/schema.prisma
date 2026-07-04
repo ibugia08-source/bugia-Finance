@@ -39,6 +39,8 @@ model User {
   ownedRules          CategorizationRule[] @relation("OwnerRule")
   ownedInstallments   Installment[]        @relation("OwnerInstallment")
   ownedCashMovements  CashBoxMovement[]    @relation("OwnerCashMovement")
+  ownedConversations  AIConversation[]     @relation("OwnerAIConversation")
+  ownedMemories       AIMemory[]           @relation("OwnerAIMemory")
 }
 
 model Person {
@@ -460,8 +462,13 @@ model AIConversation {
   id        String      @id @default(cuid())
   title     String?
   messages  AIMessage[]
+  // Dono da conversa (conta multiusuário). Cada usuário só vê o próprio histórico.
+  ownerId   String?
+  owner     User?       @relation("OwnerAIConversation", fields: [ownerId], references: [id])
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
+
+  @@index([ownerId])
 }
 
 model AIMessage {
@@ -483,8 +490,13 @@ model AIMemory {
   content   String
   source    String   @default("manual") // auto | manual
   pinned    Boolean  @default(false)
+  // Dono da memória (conta multiusuário). Cada usuário tem a própria base.
+  ownerId   String?
+  owner     User?    @relation("OwnerAIMemory", fields: [ownerId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
 }
 
 // ===== WhatsApp — agente de IA via gateway (Z-API / Evolution) =====

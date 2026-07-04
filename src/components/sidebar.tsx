@@ -30,7 +30,7 @@ type Item = {
 
 const items: Item[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/assistente", label: "Assistente IA", icon: Sparkles, adminOnly: true },
+  { href: "/assistente", label: "Assistente IA", icon: Sparkles },
   { href: "/whatsapp", label: "Agente IA", icon: MessageCircle, adminOnly: true },
   { href: "/receitas", label: "Receitas", icon: ArrowDownToLine },
   { href: "/despesas", label: "Despesas", icon: ArrowUpFromLine },
