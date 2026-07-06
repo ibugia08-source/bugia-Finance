@@ -35,7 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/despesas", label: "Despesas", icon: ArrowUpFromLine },
   { href: "/caixa", label: "Caixa", icon: PiggyBank, primary: true },
   { href: "/transacoes", label: "Movimentações", short: "Mov.", icon: Receipt, primary: true },
-  { href: "/importar", label: "Importar fatura", short: "Importar", icon: Upload },
+  { href: "/importar", label: "Importar fatura/extrato", short: "Importar", icon: Upload },
   { href: "/cartoes", label: "Contas bancárias", short: "Cartões", icon: Landmark },
   { href: "/pessoas", label: "Pessoas", icon: Users },
   { href: "/regras", label: "Regras", icon: Wand2 },

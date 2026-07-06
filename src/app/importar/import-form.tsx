@@ -48,7 +48,7 @@ export function ImportForm({ cards, accounts }: { cards: any[]; accounts: any[] 
     <Tabs defaultValue="pdf">
       <TabsList className="max-w-full overflow-x-auto">
         <TabsTrigger value="pdf">
-          <Sparkles className="h-4 w-4 mr-1" /> Fatura PDF (automático)
+          <Sparkles className="h-4 w-4 mr-1" /> Fatura/Extrato (PDF ou DOCX)
         </TabsTrigger>
         <TabsTrigger value="csv">CSV / XLSX</TabsTrigger>
       </TabsList>
@@ -70,6 +70,7 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
   const [file, setFile] = useState<File | null>(null);
   const [cardId, setCardId] = useState("");
   const [reference, setReference] = useState("");
+  const [password, setPassword] = useState("");
   const [preview, setPreview] = useState<PdfPreviewResult | null>(null);
   const [pending, start] = useTransition();
   const [result, setResult] = useState<string | null>(null);
@@ -87,19 +88,21 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
     if (file) fd.set("file", file);
     if (withCard && cardId) fd.set("cardId", cardId);
     if (reference) fd.set("reference", reference);
+    if (password) fd.set("password", password);
     return fd;
   }
 
-  function analyze(selected: File | null) {
+  function analyze(selected: File | null, pwd = "") {
     if (!selected) return;
     start(async () => {
       const fd = new FormData();
       fd.set("file", selected);
+      if (pwd) fd.set("password", pwd);
       const r = await previewPdfImport(fd);
       setPreview(r);
       setResult(null);
       if (r.ok && r.suggestedCardId) setCardId(r.suggestedCardId);
-      else setCardId("");
+      else if (r.ok) setCardId("");
       if (r.ok) setReference(refToInput(r.suggestedReference));
     });
   }
@@ -112,11 +115,16 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
       const fd = new FormData();
       fd.set("file", file);
       fd.set("cardId", id);
+      if (password) fd.set("password", password);
       const r = await previewPdfImport(fd);
       setPreview(r);
       if (r.ok && r.suggestedReference) setReference(refToInput(r.suggestedReference));
     });
   }
+
+  const needsPassword =
+    preview && preview.ok === false &&
+    (preview.reason === "ENCRYPTED" || preview.reason === "WRONG_PASSWORD");
 
   const detectedLabel =
     preview && "detectedIssuer" in preview ? preview.detectedIssuer?.label : null;
@@ -124,21 +132,24 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Suba a fatura do seu cartão em <strong>PDF</strong>. O sistema lê o documento,
-        identifica o banco automaticamente, vincula à conta bancária correspondente e lança
-        todas as compras na fatura do mês — com data de fechamento, vencimento e total.
+        Suba a <strong>fatura</strong> ou o <strong>extrato</strong> do seu cartão em{" "}
+        <strong>PDF</strong> ou <strong>DOCX</strong>. O sistema lê o documento, identifica o
+        banco automaticamente, vincula à conta bancária correspondente e lança as compras no
+        mês. Use o <strong>extrato</strong> para conferir os gastos e atribuir os responsáveis
+        antes de pagar a fatura.
       </p>
 
       <div>
-        <Label>Arquivo PDF da fatura</Label>
+        <Label>Arquivo da fatura/extrato (PDF ou DOCX)</Label>
         <Input
           type="file"
-          accept="application/pdf,.pdf"
+          accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;
             setFile(f);
             setPreview(null);
             setResult(null);
+            setPassword("");
             analyze(f);
           }}
         />
@@ -148,7 +159,7 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
         <p className="text-sm text-muted-foreground">Analisando documento…</p>
       )}
 
-      {preview && preview.ok === false && (
+      {preview && preview.ok === false && !needsPassword && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive space-y-1">
           <p className="font-medium">{preview.error}</p>
           {preview.reason && (
@@ -156,6 +167,34 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
               Motivo técnico: <code>{preview.reason}</code>
             </p>
           )}
+        </div>
+      )}
+
+      {needsPassword && (
+        <div className="rounded-md border border-amber-400/50 bg-amber-400/10 p-3 space-y-2">
+          <p className="text-sm font-medium">🔒 Fatura protegida por senha</p>
+          <p className="text-xs text-muted-foreground">
+            {preview && preview.ok === false ? preview.error : ""}
+          </p>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              placeholder="Senha do PDF (ex.: CPF, só números)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && password) analyze(file, password);
+              }}
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              disabled={!password || pending}
+              onClick={() => analyze(file, password)}
+            >
+              {pending ? "Abrindo…" : "Desbloquear"}
+            </Button>
+          </div>
         </div>
       )}
 

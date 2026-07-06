@@ -104,6 +104,13 @@ export async function updateUser(formData: FormData) {
   revalidatePath("/pessoas");
 }
 
+/** Aprova (ativa) ou suspende (desativa) uma conta. Usado no botão rápido de /usuarios. */
+export async function setUserActive(id: string, active: boolean) {
+  await requireAdmin();
+  await prisma.user.update({ where: { id }, data: { active } });
+  revalidatePath("/usuarios");
+}
+
 export async function deleteUser(id: string) {
   await requireAdmin();
   // Solta vínculo de Person, se houver

@@ -23,13 +23,13 @@ export default async function ImportarPage() {
   return (
     <div>
       <PageHeader
-        title="Importar fatura"
-        description="Suba a fatura do cartão em PDF — o banco e o cartão são detectados automaticamente e as compras são lançadas na fatura do mês. Também aceita CSV/XLSX."
+        title="Importar fatura/extrato"
+        description="Suba a fatura OU o extrato do cartão em PDF ou DOCX — o banco e o cartão são detectados automaticamente e as compras são lançadas no mês. Use o extrato para acompanhar os gastos antes mesmo de pagar a fatura. Também aceita CSV/XLSX."
       />
 
       <Tabs defaultValue="importar">
         <TabsList>
-          <TabsTrigger value="importar">Importar fatura</TabsTrigger>
+          <TabsTrigger value="importar">Importar fatura/extrato</TabsTrigger>
           <TabsTrigger value="faturas">Histórico de faturas</TabsTrigger>
         </TabsList>
 

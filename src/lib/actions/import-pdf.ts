@@ -2,13 +2,13 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import {
-  parseInvoicePdf,
   PdfImportError,
   type PdfTransaction,
   type PdfDiagnostics,
   type PdfErrorReason,
   type PdfParseResult,
 } from "@/lib/pdf/parse-invoice-pdf";
+import { parseStatementFile } from "@/lib/pdf/parse-statement-file";
 import { matchCardsByIssuer } from "@/lib/pdf/detect-issuer";
 import { getViewer } from "@/lib/auth/viewer";
 import {
@@ -113,6 +113,7 @@ export async function previewPdfImport(formData: FormData): Promise<PdfPreviewRe
   await getViewer();
   const file = formData.get("file") as File | null;
   const explicitCardId = (formData.get("cardId") as string) || "";
+  const password = (formData.get("password") as string) || "";
   if (!file) return { ok: false, error: "Arquivo ausente." };
 
   let parsed;
@@ -126,7 +127,7 @@ export async function previewPdfImport(formData: FormData): Promise<PdfPreviewRe
         bufferLen: buf.length,
       });
     }
-    parsed = await parseInvoicePdf(buf, fileMeta(file));
+    parsed = await parseStatementFile(buf, fileMeta(file), password);
   } catch (e: any) {
     if (e instanceof PdfImportError) {
       return {
@@ -215,13 +216,14 @@ export async function commitPdfImport(formData: FormData): Promise<PdfCommitResu
   const file = formData.get("file") as File | null;
   const cardId = (formData.get("cardId") as string) || "";
   const referenceInput = parseReferenceInput((formData.get("reference") as string) || null);
+  const password = (formData.get("password") as string) || "";
   if (!file) return { ok: false, error: "Arquivo ausente." };
   if (!cardId) return { ok: false, error: "Cartão não informado." };
 
   let parsed;
   try {
     const buf = await readFileBuffer(file);
-    parsed = await parseInvoicePdf(buf, fileMeta(file));
+    parsed = await parseStatementFile(buf, fileMeta(file), password);
   } catch (e: any) {
     return {
       ok: false,

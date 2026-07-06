@@ -1,9 +1,11 @@
 // Importa o arquivo interno do pdf-parse para evitar o bloco de "debug mode"
 // no index.js (que tenta abrir ./test/data/05-versions-space.pdf quando
 // module.parent é falsy — caso comum em bundlers).
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
+import { extractPdfText, PdfPasswordError } from "./extract-pdf-text";
 import { tryNubankLike } from "./parsers/nubank-like";
+import { tryNubankStatement } from "./parsers/nubank-statement";
 import { tryItauLike } from "./parsers/itau-like";
+import { tryItauStatement } from "./parsers/itau-statement";
 import { tryInterLike } from "./parsers/inter-like";
 import { tryGenericStatement } from "./parsers/generic-statement";
 import { detectIssuer } from "./detect-issuer";
@@ -31,7 +33,9 @@ export type PdfErrorReason =
   | "NOT_A_PDF"
   | "PARSE_FAIL"
   | "NO_TEXT"
-  | "NO_LAYOUT";
+  | "NO_LAYOUT"
+  | "ENCRYPTED"          // PDF protegido — falta a senha
+  | "WRONG_PASSWORD";    // senha informada está incorreta
 
 export class PdfImportError extends Error {
   diagnostics?: PdfDiagnostics;
@@ -70,7 +74,8 @@ function bufferDiagnostics(
  */
 export async function parseInvoicePdf(
   buffer: Buffer,
-  meta: { name?: string; size?: number; type?: string } = {}
+  meta: { name?: string; size?: number; type?: string } = {},
+  password?: string
 ): Promise<PdfParseResult & { diagnostics: PdfDiagnostics }> {
   const baseDiag = bufferDiagnostics(buffer, meta);
 
@@ -118,14 +123,30 @@ export async function parseInvoicePdf(
     console.info(`[pdf-import] %PDF encontrado no offset ${pdfStart}; lixo inicial removido`);
   }
 
-  // 3. tenta extrair texto
+  // 3. tenta extrair texto (com suporte a senha para faturas criptografadas)
   let parsed;
   try {
-    parsed = await pdfParse(pdfBuffer);
+    parsed = await extractPdfText(pdfBuffer, password);
   } catch (e: any) {
+    // PDF criptografado: falta a senha ou a senha está incorreta.
+    if (e instanceof PdfPasswordError) {
+      throw new PdfImportError(
+        e.incorrect ? "WRONG_PASSWORD" : "ENCRYPTED",
+        e.incorrect
+          ? "Senha incorreta. Confira e tente novamente (normalmente é o CPF do titular, só números)."
+          : "Esta fatura está protegida por senha. Informe a senha para importar (normalmente o CPF do titular, só números).",
+        {
+          layout: "unknown",
+          totalLines: 0,
+          recognized: 0,
+          sampleLines: [],
+          ...baseDiag,
+        }
+      );
+    }
     const technical = e?.message ?? String(e);
     if (process.env.NODE_ENV !== "production") {
-      console.error("[pdf-import] pdf-parse falhou:", technical, baseDiag);
+      console.error("[pdf-import] extração falhou:", technical, baseDiag);
     }
     throw new PdfImportError(
       "PARSE_FAIL",
@@ -159,9 +180,20 @@ export async function parseInvoicePdf(
     );
   }
 
+  return buildResultFromText(text, baseDiag);
+}
+
+/**
+ * Interpreta o TEXTO já extraído (de PDF ou DOCX) rodando os parsers por banco
+ * e o fallback genérico. Compartilhado entre a importação de PDF e DOCX.
+ */
+export function buildResultFromText(
+  text: string,
+  baseDiag: Partial<PdfDiagnostics> = {}
+): PdfParseResult & { diagnostics: PdfDiagnostics } {
   const allLines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
-  const candidates = [tryNubankLike, tryItauLike, tryInterLike];
+  const candidates = [tryNubankStatement, tryNubankLike, tryItauStatement, tryItauLike, tryInterLike];
   let best: PdfParseResult | null = null;
   for (const fn of candidates) {
     const r = fn(text);
@@ -191,7 +223,7 @@ export async function parseInvoicePdf(
   if (!best || recognized === 0) {
     throw new PdfImportError(
       "NO_LAYOUT",
-      "Não conseguimos reconhecer o layout deste extrato. Tente exportar em CSV/XLSX ou ajustar manualmente.",
+      "Não conseguimos reconhecer o layout deste documento. Tente exportar o extrato/fatura em CSV/XLSX ou ajustar manualmente.",
       diagnostics
     );
   }
