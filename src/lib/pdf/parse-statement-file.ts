@@ -66,7 +66,9 @@ async function parseDocx(
     );
   }
 
-  return buildResultFromText(text, {
+  // DOCX não tem posição de colunas: o texto do mammoth já vem separado, então
+  // usamos o mesmo texto como "espaçado".
+  return buildResultFromText(text, text, {
     fileName: meta.name,
     fileSize: meta.size,
     fileType: meta.type,

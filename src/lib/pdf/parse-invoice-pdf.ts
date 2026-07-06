@@ -6,6 +6,7 @@ import { tryNubankLike } from "./parsers/nubank-like";
 import { tryNubankStatement } from "./parsers/nubank-statement";
 import { tryItauLike } from "./parsers/itau-like";
 import { tryItauStatement } from "./parsers/itau-statement";
+import { tryC6Statement } from "./parsers/c6-statement";
 import { tryInterLike } from "./parsers/inter-like";
 import { tryGenericStatement } from "./parsers/generic-statement";
 import { detectIssuer } from "./detect-issuer";
@@ -180,19 +181,24 @@ export async function parseInvoicePdf(
     );
   }
 
-  return buildResultFromText(text, baseDiag);
+  return buildResultFromText(text, (parsed.spacedText ?? "").trim() || text, baseDiag);
 }
 
 /**
  * Interpreta o TEXTO já extraído (de PDF ou DOCX) rodando os parsers por banco
  * e o fallback genérico. Compartilhado entre a importação de PDF e DOCX.
+ *
+ * `spacedText` é a variante com colunas separadas por espaço (usada por layouts
+ * como o C6). Para DOCX, onde não há posição, passe o mesmo texto.
  */
 export function buildResultFromText(
   text: string,
+  spacedText: string = text,
   baseDiag: Partial<PdfDiagnostics> = {}
 ): PdfParseResult & { diagnostics: PdfDiagnostics } {
   const allLines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
+  // Parsers sobre o texto COLADO (Nubank/Inter/Itaú/genérico) + C6 sobre o ESPAÇADO.
   const candidates = [tryNubankStatement, tryNubankLike, tryItauStatement, tryItauLike, tryInterLike];
   let best: PdfParseResult | null = null;
   for (const fn of candidates) {
@@ -200,6 +206,10 @@ export function buildResultFromText(
     if (r && (!best || r.transactions.length > best.transactions.length)) {
       best = r;
     }
+  }
+  const c6 = tryC6Statement(spacedText);
+  if (c6 && (!best || c6.transactions.length > best.transactions.length)) {
+    best = c6;
   }
   // fallback genérico
   const generic = tryGenericStatement(text);

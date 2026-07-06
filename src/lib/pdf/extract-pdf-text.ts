@@ -18,25 +18,36 @@ export class PdfPasswordError extends Error {
   }
 }
 
-async function renderPage(pageData: any): Promise<string> {
+async function renderPage(pageData: any): Promise<{ glued: string; spaced: string }> {
   const textContent = await pageData.getTextContent({
     normalizeWhitespace: false,
     disableCombineTextItems: false,
   });
   let lastY: number | undefined;
-  let text = "";
+  // `glued`: replica o pdf-parse (itens da mesma linha colados) — é o que os
+  // parsers Nubank/Inter/Itaú esperam.
+  // `spaced`: insere espaço entre itens da MESMA linha (colunas diferentes do
+  // PDF). Necessário para layouts como o C6, onde valor/descrição/parcela vêm
+  // em colunas separadas e coladas ficariam ambíguas.
+  let glued = "";
+  let spaced = "";
   for (const item of textContent.items) {
-    if (lastY === item.transform[5] || lastY === undefined) {
-      text += item.str;
+    if (lastY === undefined) {
+      glued += item.str;
+      spaced += item.str;
+    } else if (lastY === item.transform[5]) {
+      glued += item.str;
+      spaced += " " + item.str;
     } else {
-      text += "\n" + item.str;
+      glued += "\n" + item.str;
+      spaced += "\n" + item.str;
     }
     lastY = item.transform[5];
   }
-  return text;
+  return { glued, spaced };
 }
 
-export type PdfTextResult = { text: string; numpages: number };
+export type PdfTextResult = { text: string; spacedText: string; numpages: number };
 
 /**
  * Extrai o texto do PDF. Se `password` for informada, tenta decriptar com ela.
@@ -64,14 +75,16 @@ export async function extractPdfText(
 
   const numpages = doc.numPages;
   let text = "";
+  let spacedText = "";
   for (let i = 1; i <= numpages; i++) {
-    const pageText = await doc
+    const page = await doc
       .getPage(i)
-      .then((page: any) => renderPage(page))
-      .catch(() => "");
-    text += `\n\n${pageText}`;
+      .then((p: any) => renderPage(p))
+      .catch(() => ({ glued: "", spaced: "" }));
+    text += `\n\n${page.glued}`;
+    spacedText += `\n\n${page.spaced}`;
   }
   doc.destroy();
 
-  return { text, numpages };
+  return { text, spacedText, numpages };
 }
