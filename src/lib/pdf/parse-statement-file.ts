@@ -6,6 +6,8 @@ import {
   type PdfDiagnostics,
 } from "./parse-invoice-pdf";
 import type { PdfParseResult } from "./types";
+import { aiExtractStatement } from "./ai-extract";
+import { AINotConfiguredError } from "@/lib/ai/provider";
 
 export type StatementFileMeta = { name?: string; size?: number; type?: string };
 
@@ -84,8 +86,28 @@ export async function parseStatementFile(
   meta: StatementFileMeta = {},
   password?: string
 ): Promise<PdfParseResult & { diagnostics: PdfDiagnostics }> {
-  if (isDocx(buffer, meta)) {
-    return parseDocx(buffer, meta);
+  try {
+    if (isDocx(buffer, meta)) {
+      return await parseDocx(buffer, meta);
+    }
+    return await parseInvoicePdf(buffer, meta, password);
+  } catch (e) {
+    // Fallback de IA: documento não reconhecido pelos parsers fixos. Se a IA
+    // estiver configurada, tenta extrair os dados dela a partir do texto.
+    if (
+      e instanceof PdfImportError &&
+      e.reason === "NO_LAYOUT" &&
+      e.diagnostics?.fullText
+    ) {
+      try {
+        const ai = await aiExtractStatement(e.diagnostics.fullText);
+        return { ...ai, diagnostics: { ...e.diagnostics, layout: "ai" } };
+      } catch (aiErr) {
+        // IA não configurada → mantém a mensagem original (parsers não reconheceram).
+        if (aiErr instanceof AINotConfiguredError) throw e;
+        throw aiErr;
+      }
+    }
+    throw e;
   }
-  return parseInvoicePdf(buffer, meta, password);
 }

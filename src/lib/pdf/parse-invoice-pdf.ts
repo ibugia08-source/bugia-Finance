@@ -20,6 +20,7 @@ export type PdfDiagnostics = {
   totalLines: number;
   recognized: number;
   sampleLines: string[]; // primeiras linhas do texto extraído
+  fullText?: string;     // texto completo (usado pelo fallback de IA em NO_LAYOUT)
   fileName?: string;
   fileSize?: number;
   fileType?: string;
@@ -227,13 +228,15 @@ export function buildResultFromText(
     totalLines: allLines.length,
     recognized,
     sampleLines: allLines.slice(0, 30),
+    // texto completo (espaçado) para o fallback de IA quando não reconhecido
+    fullText: recognized === 0 ? spacedText : undefined,
     ...baseDiag,
   };
 
   if (!best || recognized === 0) {
     throw new PdfImportError(
       "NO_LAYOUT",
-      "Não conseguimos reconhecer o layout deste documento. Tente exportar o extrato/fatura em CSV/XLSX ou ajustar manualmente.",
+      "Não reconhecemos automaticamente o layout deste documento. Ative a IA do Assistente (nas configurações) para leitura inteligente de qualquer fatura/extrato, ou exporte em CSV/XLSX.",
       diagnostics
     );
   }

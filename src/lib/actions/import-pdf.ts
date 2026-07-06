@@ -9,6 +9,7 @@ import {
   type PdfParseResult,
 } from "@/lib/pdf/parse-invoice-pdf";
 import { parseStatementFile } from "@/lib/pdf/parse-statement-file";
+import type { StatementMeta } from "@/lib/pdf/types";
 import { matchCardsByIssuer } from "@/lib/pdf/detect-issuer";
 import { getViewer } from "@/lib/auth/viewer";
 import {
@@ -48,6 +49,8 @@ export type PdfPreviewResult =
       candidateCards: DetectedCard[];
       // Fatura âncora sugerida (vencimento/fechamento do PDF, ou inferida)
       suggestedReference: ImportReference | null;
+      // Dados extras da fatura (limite, saldo, mínimo, titular) — via IA
+      meta?: StatementMeta | null;
     }
   | {
       ok: false;
@@ -197,6 +200,7 @@ export async function previewPdfImport(formData: FormData): Promise<PdfPreviewRe
       bank: c.bank,
     })),
     suggestedReference: reference,
+    meta: parsed.meta ?? null,
   };
 }
 

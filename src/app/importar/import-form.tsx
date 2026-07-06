@@ -136,7 +136,9 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
         <strong>PDF</strong> ou <strong>DOCX</strong>. O sistema lê o documento, identifica o
         banco automaticamente, vincula à conta bancária correspondente e lança as compras no
         mês. Use o <strong>extrato</strong> para conferir os gastos e atribuir os responsáveis
-        antes de pagar a fatura.
+        antes de pagar a fatura. Documentos de bancos ainda não mapeados são lidos por{" "}
+        <strong>IA</strong> (com o Assistente ativado), extraindo transações, limite, saldo e
+        mais — mesmo com a fatura em aberto.
       </p>
 
       <div>
@@ -210,7 +212,59 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
                 <Badge variant="warning">não identificado</Badge>
               )}
               <Badge variant="secondary">layout: {preview.layout}</Badge>
+              {preview.layout === "ai" && (
+                <Badge variant="secondary">
+                  <Sparkles className="h-3 w-3 mr-1" /> lido por IA
+                </Badge>
+              )}
             </div>
+
+            {preview.meta && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs pt-1">
+                {preview.meta.holder && (
+                  <div>
+                    <span className="text-muted-foreground">Titular: </span>
+                    {preview.meta.holder}
+                  </div>
+                )}
+                {preview.meta.cardLastDigits && (
+                  <div>
+                    <span className="text-muted-foreground">Cartão final: </span>
+                    {preview.meta.cardLastDigits}
+                  </div>
+                )}
+                {preview.meta.minimumPayment != null && (
+                  <div>
+                    <span className="text-muted-foreground">Mínimo: </span>
+                    {formatBRL(preview.meta.minimumPayment)}
+                  </div>
+                )}
+                {preview.meta.limitTotal != null && (
+                  <div>
+                    <span className="text-muted-foreground">Limite total: </span>
+                    {formatBRL(preview.meta.limitTotal)}
+                  </div>
+                )}
+                {preview.meta.limitAvailable != null && (
+                  <div>
+                    <span className="text-muted-foreground">Limite disponível: </span>
+                    {formatBRL(preview.meta.limitAvailable)}
+                  </div>
+                )}
+                {preview.meta.balance != null && (
+                  <div>
+                    <span className="text-muted-foreground">Saldo: </span>
+                    {formatBRL(preview.meta.balance)}
+                  </div>
+                )}
+                {preview.meta.previousBalance != null && (
+                  <div>
+                    <span className="text-muted-foreground">Fatura anterior: </span>
+                    {formatBRL(preview.meta.previousBalance)}
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <Label className="text-xs">Lançar na conta bancária</Label>
               <div className="flex gap-2">
@@ -272,6 +326,25 @@ function PdfAutoPanel({ cards }: { cards: any[] }) {
               <Badge variant="outline">vencimento: {formatDateBR(preview.dueDate)}</Badge>
             )}
           </div>
+
+          {(() => {
+            const soma = preview.rows.reduce((s, r) => s + r.amount, 0);
+            const tot = preview.totalDetected;
+            if (tot == null) return null;
+            const diff = Math.abs(soma - tot);
+            if (diff <= Math.max(tot * 0.02, 1)) return null;
+            return (
+              <div className="rounded-md border border-amber-400/50 bg-amber-400/10 p-3 text-xs space-y-1">
+                <p className="font-medium">⚠️ A soma das transações não bate com o total da fatura</p>
+                <p className="text-muted-foreground">
+                  Soma lida: {formatBRL(soma)} · Total do documento: {formatBRL(tot)} · Diferença: {formatBRL(diff)}.
+                  {preview.layout === "ai"
+                    ? " A leitura por IA pode estar incompleta neste documento — confira as transações antes de lançar."
+                    : " Podem faltar transações ou haver créditos/pagamentos no valor — confira antes de lançar."}
+                </p>
+              </div>
+            );
+          })()}
 
           <div className="border rounded max-h-80 overflow-auto">
             <Table>
